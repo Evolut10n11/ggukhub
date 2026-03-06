@@ -1,9 +1,43 @@
+# Local environment
 .env
+.env.local
+.env.*.local
+
+# Virtual environments
 venv/
 venv312/
-\.venv/
+.venv/
+
+# Python cache / artifacts
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Tool caches
 .pytest_cache/
-*.pyc
+.mypy_cache/
+.ruff_cache/
+
+# Coverage / test outputs
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local runtime data
 app.db
+*.db
+*.sqlite
+*.sqlite3
 .bot.lock
+*.log
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

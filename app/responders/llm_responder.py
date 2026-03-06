@@ -250,7 +250,11 @@ class LLMResponder(BaseResponder):
             )
             return str(result.output).strip()
 
-        with flow_obs.start_as_current_observation(name="running 1 tool", as_type="chain") as chain_obs:
+        with flow_obs.start_as_current_observation(
+            name="running 1 tool",
+            as_type="chain",
+            input=summary_input,
+        ) as chain_obs:
             with chain_obs.start_as_current_observation(
                 name="document_agent_tool",
                 as_type="tool",
@@ -272,13 +276,14 @@ class LLMResponder(BaseResponder):
                             message_history=few_shot_history,
                             model=writer_deps.writer_model,
                         )
+                        output = str(result.output).strip()
+                        usage_details = self._usage_details_from_result(result)
+                        if generation_obs is not None:
+                            generation_obs.update(output=output, usage_details=usage_details)
 
-                    output = str(result.output).strip()
-                    usage_details = self._usage_details_from_result(result)
-                    if generation_obs is not None:
-                        generation_obs.update(output=output, usage_details=usage_details)
                     writer_obs.update(output=output)
                     tool_obs.update(output=output)
+                    chain_obs.update(output=output)
                     return output
 
     async def report_created(self, local_id: int, bitrix_id: str | None) -> str:

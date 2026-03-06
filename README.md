@@ -163,6 +163,11 @@ Qwen-тесты:
 pytest -q tests/test_llm_responder_qwen.py
 ```
 
+Bitrix-тесты (формирование payload + e2e сохранение `bitrix_id`):
+```bash
+pytest -q tests/test_bitrix_ticket_flow.py -k "not live"
+```
+
 Live-smoke с реальным Qwen (опционально):
 ```bash
 set RUN_QWEN_LIVE_TESTS=1
@@ -173,6 +178,18 @@ Live-smoke с Langfuse (опционально):
 ```bash
 set RUN_LANGFUSE_LIVE_TESTS=1
 pytest -q tests/test_langfuse_live.py
+```
+
+Live-smoke с реальным Bitrix24 (опционально, создаст реальную тестовую заявку):
+```bash
+set RUN_BITRIX_LIVE_TESTS=1
+pytest -q tests/test_bitrix_ticket_flow.py -k live
+```
+
+Набор из 10 live-сценариев Langfuse:
+```bash
+set RUN_LANGFUSE_LIVE_TESTS=1
+pytest -q -s tests/test_langfuse_10_scenarios_live.py
 ```
 
 Покрыто:

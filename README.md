@@ -99,6 +99,18 @@ pwsh ./scripts/sync_langfuse_repos.ps1
 ```
 По умолчанию они синхронизируются в `C:\Users\rodionov.ip\Desktop\git`.
 
+## Langfuse: синхронизация промпта из репозитория
+Чтобы "привязать репозиторий" к Langfuse в рабочем процессе, синхронизируйте промпт напрямую из проекта:
+```powershell
+python scripts/sync_prompt_to_langfuse.py
+```
+
+Скрипт:
+- берет `LANGFUSE_PROMPT_FILE` (по умолчанию `app/prompts/system.dspy.txt`);
+- создает новую версию `LANGFUSE_PROMPT_NAME` с label `LANGFUSE_PROMPT_LABEL`;
+- прикладывает git-метаданные (`branch/commit/remote/dirty`) в `config` prompt-версии;
+- пропускает публикацию, если контент и commit не изменились.
+
 ## Endpoints
 - `GET /health` — healthcheck
 - `POST /bitrix/webhook` — входящие события из Bitrix24 (generic receiver + secret check + log)
@@ -119,8 +131,10 @@ pwsh ./scripts/sync_langfuse_repos.ps1
 - По умолчанию: `USE_LLM=false`, работает `RuleResponder`.
 - LLM-режим разрешен только с моделью `Qwen3.5-35B-A3B`.
 - Базовый URL в `.env`: `LLM_BASE_URL=http://192.168.130.159:8080/v1`.
-- Лимит ответа модели: `LLM_MAX_TOKENS=8192`.
+- Лимит ответа модели: `LLM_MAX_TOKENS=12288` (можно поднять выше при необходимости).
+- Размер few-shot контекста: `LLM_FEW_SHOT_LIMIT=20` (по умолчанию берутся все доступные примеры).
 - При заполнении `LANGFUSE_*` включается tracing через `pydantic-ai-langfuse-extras`.
+- В LLMResponder включен оркестраторный режим: `uk_orchestrator_agent` вызывает tool `compose_confirmation`, после чего работает `uk_writer_agent`. Это дает более читаемое дерево трасс в Langfuse.
 
 ## Голос в Telegram
 - Бот умеет принимать `voice`-сообщения и переводить их в текст перед обычной обработкой диалога.
@@ -137,7 +151,7 @@ pwsh ./scripts/sync_langfuse_repos.ps1
 ## Ускорение отправки заявки
 - Бот отвечает пользователю сразу после локальной регистрации заявки, а отправка в Bitrix24 идет в фоне.
 - После успешной передачи бот присылает отдельное сообщение с номером Bitrix24.
-- Для более быстрого LLM-ответа уменьшите `LLM_MAX_TOKENS` до `256-512` (для коротких сервисных сообщений этого достаточно).
+- Для более быстрого LLM-ответа уменьшите `LLM_MAX_TOKENS` до `256-512` и `LLM_FEW_SHOT_LIMIT` до `4-8`.
 
 ## Тесты
 ```bash
@@ -153,6 +167,12 @@ Live-smoke с реальным Qwen (опционально):
 ```bash
 set RUN_QWEN_LIVE_TESTS=1
 pytest -q tests/test_llm_responder_qwen.py -k live
+```
+
+Live-smoke с Langfuse (опционально):
+```bash
+set RUN_LANGFUSE_LIVE_TESTS=1
+pytest -q tests/test_langfuse_live.py
 ```
 
 Покрыто:

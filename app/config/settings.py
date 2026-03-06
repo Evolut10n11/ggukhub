@@ -55,7 +55,8 @@ class Settings(BaseSettings):
     llm_base_url: str = Field(default="http://192.168.130.159:8080/v1", alias="LLM_BASE_URL")
     llm_model: str = Field(default=ALLOWED_LLM_MODEL, alias="LLM_MODEL")
     llm_api_key: str | None = Field(default=None, alias="LLM_API_KEY")
-    llm_max_tokens: int = Field(default=8192, alias="LLM_MAX_TOKENS")
+    llm_max_tokens: int = Field(default=12288, alias="LLM_MAX_TOKENS")
+    llm_few_shot_limit: int = Field(default=20, alias="LLM_FEW_SHOT_LIMIT")
     speech_enabled: bool = Field(default=False, alias="SPEECH_ENABLED")
     speech_base_url: str = Field(default="http://192.168.130.159:8080/v1", alias="SPEECH_BASE_URL")
     speech_api_key: str | None = Field(default=None, alias="SPEECH_API_KEY")
@@ -64,7 +65,11 @@ class Settings(BaseSettings):
     speech_device: str = Field(default="cpu", alias="SPEECH_DEVICE")
     speech_compute_type: str = Field(default="int8", alias="SPEECH_COMPUTE_TYPE")
     speech_timeout_seconds: float = Field(default=45.0, alias="SPEECH_TIMEOUT_SECONDS")
-    langfuse_host: str | None = Field(default=None, alias="LANGFUSE_HOST")
+    langfuse_host: str | None = Field(
+        default=None,
+        alias="LANGFUSE_HOST",
+        validation_alias=AliasChoices("LANGFUSE_HOST", "LANGFUSE_BASE_URL"),
+    )
     langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
     langfuse_secret_key: str | None = Field(default=None, alias="LANGFUSE_SECRET_KEY")
     langfuse_environment: str = Field(default="default", alias="LANGFUSE_ENVIRONMENT")
@@ -99,6 +104,15 @@ class Settings(BaseSettings):
     def validate_max_tokens(cls, value: int) -> int:
         if value < 256:
             raise ValueError("LLM_MAX_TOKENS must be >= 256")
+        return value
+
+    @field_validator("llm_few_shot_limit")
+    @classmethod
+    def validate_few_shot_limit(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("LLM_FEW_SHOT_LIMIT must be >= 1")
+        if value > 64:
+            raise ValueError("LLM_FEW_SHOT_LIMIT must be <= 64")
         return value
 
     @field_validator("speech_timeout_seconds")

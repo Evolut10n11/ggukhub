@@ -24,7 +24,7 @@ async def test_qwen_responder_uses_qwen_config_and_returns_llm_output(monkeypatc
             return SimpleNamespace(output="ok from qwen path")
 
     monkeypatch.setattr(llm_module, "openai_model_from_config", fake_openai_model_from_config)
-    monkeypatch.setattr(llm_module, "_agent", DummyAgent())
+    monkeypatch.setattr(llm_module, "_writer_agent", DummyAgent())
 
     settings = Settings(
         telegram_bot_token="x",
@@ -33,6 +33,9 @@ async def test_qwen_responder_uses_qwen_config_and_returns_llm_output(monkeypatc
         llm_base_url="http://127.0.0.1:8080/v1",
         llm_max_tokens=512,
         llm_api_key="",
+        langfuse_host=None,
+        langfuse_public_key=None,
+        langfuse_secret_key=None,
     )
     responder = LLMResponder(settings)
 
@@ -61,13 +64,16 @@ async def test_qwen_responder_falls_back_to_rules_when_agent_fails(monkeypatch: 
             raise RuntimeError("qwen temporary failure")
 
     monkeypatch.setattr(llm_module, "openai_model_from_config", fake_openai_model_from_config)
-    monkeypatch.setattr(llm_module, "_agent", FailingAgent())
+    monkeypatch.setattr(llm_module, "_writer_agent", FailingAgent())
 
     settings = Settings(
         telegram_bot_token="x",
         use_llm=True,
         llm_model=ALLOWED_LLM_MODEL,
         llm_base_url="http://127.0.0.1:8080/v1",
+        langfuse_host=None,
+        langfuse_public_key=None,
+        langfuse_secret_key=None,
     )
     responder = LLMResponder(settings)
 

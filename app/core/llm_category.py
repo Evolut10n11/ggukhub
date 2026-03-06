@@ -62,7 +62,7 @@ class _Deps:
     instructions: str
 
 
-_category_agent = Agent(model=TestModel(), deps_type=_Deps)
+_category_agent = Agent(model=TestModel(), deps_type=_Deps, name="uk_category_agent")
 
 
 @_category_agent.instructions

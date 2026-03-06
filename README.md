@@ -1,0 +1,162 @@
+﻿# UK "Zelyony Sad" AI Assistant (v0 Skeleton)
+
+Каркас текстового AI-ассистента для УК "Зелёный сад" на Python:
+- Telegram-бот (`aiogram`)
+- Backend API + webhook endpoints (`FastAPI`)
+- Интеграция с Bitrix24 (создание/обновление заявок + прием событий)
+- Детектор массовых обращений (15 минут / порог 5)
+- Промпт-стиль "Заботливая поддержка" (RuleResponder + LLMResponder)
+
+LLM-слой перестроен на:
+- `pydantic-ai`
+- `pydantic-ai-langfuse-extras` (model/prompt/tracing adapters)
+
+На v0 **нет** RAG/MCP/rerank.
+
+## Структура
+```text
+.
+├─ app
+│  ├─ config
+│  ├─ telegram
+│  ├─ bitrix
+│  ├─ core
+│  ├─ incidents
+│  ├─ prompts
+│  ├─ responders
+│  ├─ main.py
+│  └─ run_bot.py
+├─ data
+│  ├─ housing_complexes.json
+│  ├─ categories.json
+│  └─ tariffs.json
+├─ tests
+├─ .env.example
+├─ requirements.txt
+└─ requirements-llm.txt
+```
+
+## Быстрый старт (без Docker)
+1. Создайте окружение:
+```bash
+python -m venv venv
+```
+или
+```bash
+uv venv
+```
+
+2. Активируйте окружение и установите базовые зависимости:
+```bash
+pip install -r requirements.txt
+```
+
+3. Настройте переменные:
+```bash
+cp .env.example .env
+```
+
+4. Запустите API:
+```bash
+uvicorn app.main:app --reload
+```
+
+5. Запустите Telegram-бота (polling):
+```bash
+python -m app.run_bot
+```
+
+## LLM-профиль (обязательные репо `pydantic-ai` + `pydantic-ai-langfuse-extras`)
+LLM-профиль требует Python `>=3.12` (ограничение `pydantic-ai-langfuse-extras`).
+
+Установка:
+```bash
+pip install -r requirements-llm.txt
+```
+
+Если нет доступа к Gitea, можно ставить из локальных клонов:
+```bash
+pip install C:/Users/rodionov.ip/Desktop/git/pydantic-ai
+pip install C:/Users/rodionov.ip/Desktop/git/pydantic-ai-langfuse-extras
+```
+
+## DSPy: автогенерация системного промпта
+Если нужно сгенерировать системный промпт автоматически под текущую задачу:
+```bash
+pip install -r requirements-dspy.txt
+python scripts/generate_system_prompt_dspy.py --output app/prompts/system.dspy.txt
+```
+
+Скрипт использует:
+- `LLM_BASE_URL` (должен оканчиваться на `/v1`)
+- `LLM_MODEL` (в проекте допускается `Qwen3.5-35B-A3B`)
+- `LLM_API_KEY` (опционально для локального gateway)
+
+## Langfuse: подтянуть reference-репозитории
+Для обновления локальных репозиториев `pydantic-ai` и `pydantic-ai-langfuse-extras`:
+```powershell
+pwsh ./scripts/sync_langfuse_repos.ps1
+```
+По умолчанию они синхронизируются в `C:\Users\rodionov.ip\Desktop\git`.
+
+## Endpoints
+- `GET /health` — healthcheck
+- `POST /bitrix/webhook` — входящие события из Bitrix24 (generic receiver + secret check + log)
+- `POST /telegram/webhook` — webhook для Telegram (если `TELEGRAM_USE_WEBHOOK=true`)
+- `GET /reports/{report_id}/audit` — журнал формирования заявки по регламенту (этапы `report_created`, `bitrix_synced|bitrix_sync_failed`)
+
+## Регламент заявки (аудит)
+- При создании заявки бот сохраняет в БД "паспорт формирования":
+  - какие поля пришли из сессии (`jk`, `дом`, `подъезд`, `квартира`, `телефон`, `текст`)
+  - как они нормализованы в итоговую заявку
+  - итоговая категория и признак массового инцидента
+- Записи лежат в таблице `report_audit_logs` с версией регламента `uk_zeleniy_sad_telegram_v1`.
+- После попытки отправки в Bitrix24 добавляется отдельная запись:
+  - `bitrix_synced` (успех)
+  - `bitrix_sync_failed` (ошибка)
+
+## LLM
+- По умолчанию: `USE_LLM=false`, работает `RuleResponder`.
+- LLM-режим разрешен только с моделью `Qwen3.5-35B-A3B`.
+- Базовый URL в `.env`: `LLM_BASE_URL=http://192.168.130.159:8080/v1`.
+- Лимит ответа модели: `LLM_MAX_TOKENS=8192`.
+- При заполнении `LANGFUSE_*` включается tracing через `pydantic-ai-langfuse-extras`.
+
+## Голос в Telegram
+- Бот умеет принимать `voice`-сообщения и переводить их в текст перед обычной обработкой диалога.
+- Для включения выставьте:
+  - `SPEECH_ENABLED=true`
+  - `SPEECH_BASE_URL=local://faster-whisper`
+  - `SPEECH_MODEL=small`
+  - `SPEECH_DEVICE=cpu`
+  - `SPEECH_COMPUTE_TYPE=int8`
+- После распознавания бот отправляет пользователю текст и продолжает сценарий заявки.
+- Установка локального STT: `pip install faster-whisper`
+- Альтернатива через API: можно задать `SPEECH_BASE_URL=https://api.openai.com/v1`, `SPEECH_MODEL=gpt-4o-transcribe`, `SPEECH_API_KEY=<key>`.
+
+## Ускорение отправки заявки
+- Бот отвечает пользователю сразу после локальной регистрации заявки, а отправка в Bitrix24 идет в фоне.
+- После успешной передачи бот присылает отдельное сообщение с номером Bitrix24.
+- Для более быстрого LLM-ответа уменьшите `LLM_MAX_TOKENS` до `256-512` (для коротких сервисных сообщений этого достаточно).
+
+## Тесты
+```bash
+pytest -q
+```
+
+Qwen-тесты:
+```bash
+pytest -q tests/test_llm_responder_qwen.py
+```
+
+Live-smoke с реальным Qwen (опционально):
+```bash
+set RUN_QWEN_LIVE_TESTS=1
+pytest -q tests/test_llm_responder_qwen.py -k live
+```
+
+Покрыто:
+- rule-based классификация категорий
+- большая матрица классификации (494 кейса по категориям и реальным формулировкам)
+- детектор массовости (порог/окно)
+- детектор фраз приветствия/прощания

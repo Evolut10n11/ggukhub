@@ -9,7 +9,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 
 from app.config import Settings, get_settings
 from app.core.runtime import AppRuntime, create_app_runtime
-from app.telegram.bot import create_bot, create_dispatcher
+from app.telegram.bot import configure_bot_ui, create_bot, create_dispatcher
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -29,6 +29,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise RuntimeError("TELEGRAM_BOT_TOKEN is required for webhook mode")
             app.state.webhook_bot = create_bot(runtime.services.settings.telegram_bot_token)
             app.state.webhook_dispatcher = create_dispatcher(runtime.services)
+            await configure_bot_ui(app.state.webhook_bot)
 
         try:
             yield

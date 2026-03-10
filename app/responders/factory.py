@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 def create_responder(settings: Settings) -> BaseResponder:
-    if settings.use_llm:
+    if settings.use_llm and settings.llm_responder_enabled:
         try:
             from app.responders.llm_responder import LLMResponder
 
             return LLMResponder(settings)
         except Exception as error:
-            logger.warning("LLM responder unavailable, fallback to RuleResponder: %s", error)
+            logger.info("LLM responder unavailable, fallback to RuleResponder: %s", error)
     return RuleResponder()

@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, ErrorEvent, Message
 
 from app.core.services import AppServices
@@ -22,7 +22,7 @@ from app.telegram.dialog.state_machine import (
     next_missing_step,
 )
 from app.telegram.extractors import ExtractedReportContext
-from app.telegram.keyboards import build_jk_keyboard
+from app.telegram.keyboards import MAIN_MENU_NEW_REQUEST, MAIN_MENU_STATUS, build_jk_keyboard, build_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def _message_transport(message: Message) -> DialogTransport:
         raise RuntimeError("Message sender is missing")
 
     async def _send_text(text: str, reply_markup: Any | None) -> None:
-        await message.answer(text, reply_markup=reply_markup)
+        await message.answer(text, reply_markup=reply_markup or build_main_menu_keyboard())
 
     async def _clear_inline_keyboard() -> None:
         return None
@@ -71,9 +71,13 @@ def _callback_transport(callback: CallbackQuery) -> DialogTransport:
     async def _send_text(text: str, reply_markup: Any | None) -> None:
         message = _callback_message(callback)
         if message is not None:
-            await message.answer(text, reply_markup=reply_markup)
+            await message.answer(text, reply_markup=reply_markup or build_main_menu_keyboard())
             return
-        await callback.bot.send_message(chat_id=callback.from_user.id, text=text, reply_markup=reply_markup)
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=text,
+            reply_markup=reply_markup or build_main_menu_keyboard(),
+        )
 
     async def _clear_inline_keyboard() -> None:
         message = _callback_message(callback)
@@ -154,6 +158,20 @@ async def start_handler(message: Message, services: AppServices) -> None:
     if message.from_user is None:
         return
     await _dialog_service(services).start(_message_transport(message), include_welcome=True)
+
+
+@router.message(Command("new"))
+async def new_request_command_handler(message: Message, services: AppServices) -> None:
+    if message.from_user is None:
+        return
+    await _dialog_service(services).start(_message_transport(message), include_welcome=False)
+
+
+@router.message(Command("status"))
+async def status_command_handler(message: Message, services: AppServices) -> None:
+    if message.from_user is None:
+        return
+    await _process_text_dialog(message, services, MAIN_MENU_STATUS)
 
 
 @router.callback_query(F.data.startswith("jk_page:"))
@@ -308,6 +326,12 @@ async def text_dialog_handler(message: Message, services: AppServices) -> None:
 
     text = message.text.strip()
     if not text or text.startswith("/"):
+        return
+    if text == MAIN_MENU_NEW_REQUEST:
+        await _dialog_service(services).start(_message_transport(message), include_welcome=False)
+        return
+    if text == MAIN_MENU_STATUS:
+        await _process_text_dialog(message, services, text)
         return
 
     await _process_text_dialog(message, services, text)

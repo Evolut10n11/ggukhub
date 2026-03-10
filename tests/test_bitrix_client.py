@@ -44,6 +44,18 @@ async def test_bitrix_client_reuses_async_client_and_closes_it() -> None:
     assert client._client is None
 
 
+def test_bitrix_client_uses_configured_timeout() -> None:
+    settings = Settings(
+        telegram_bot_token="x",
+        use_llm=False,
+        bitrix_webhook_url="https://bitrix.example/rest/1/webhook",
+        bitrix_timeout_seconds=7.5,
+    )
+    client = BitrixApiClient(settings)
+
+    assert client.timeout_seconds == 7.5
+
+
 @pytest.mark.asyncio
 async def test_bitrix_client_raises_transport_error() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:

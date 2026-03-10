@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -59,9 +60,14 @@ class Settings(BaseSettings):
     llm_few_shot_limit: int = Field(default=20, alias="LLM_FEW_SHOT_LIMIT")
     llm_category_max_tokens: int = Field(default=96, alias="LLM_CATEGORY_MAX_TOKENS")
     llm_category_timeout_seconds: float = Field(default=2.0, alias="LLM_CATEGORY_TIMEOUT_SECONDS")
+    llm_category_soft_timeout_seconds: float = Field(default=1.0, alias="LLM_CATEGORY_SOFT_TIMEOUT_SECONDS")
+    llm_responder_enabled: bool = Field(default=True, alias="LLM_RESPONDER_ENABLED")
     llm_report_max_tokens: int = Field(default=256, alias="LLM_REPORT_MAX_TOKENS")
     llm_report_timeout_seconds: float = Field(default=2.5, alias="LLM_REPORT_TIMEOUT_SECONDS")
+    llm_report_soft_timeout_seconds: float = Field(default=1.2, alias="LLM_REPORT_SOFT_TIMEOUT_SECONDS")
     llm_report_failure_cooldown_seconds: float = Field(default=30.0, alias="LLM_REPORT_FAILURE_COOLDOWN_SECONDS")
+    report_confirmation_budget_ms: int = Field(default=3500, alias="REPORT_CONFIRMATION_BUDGET_MS")
+    bitrix_timeout_seconds: float = Field(default=10.0, alias="BITRIX_TIMEOUT_SECONDS")
     speech_enabled: bool = Field(default=False, alias="SPEECH_ENABLED")
     speech_base_url: str = Field(default="http://192.168.130.159:8080/v1", alias="SPEECH_BASE_URL")
     speech_api_key: str | None = Field(default=None, alias="SPEECH_API_KEY")
@@ -135,6 +141,13 @@ class Settings(BaseSettings):
             raise ValueError("LLM_CATEGORY_TIMEOUT_SECONDS must be > 0")
         return value
 
+    @field_validator("llm_category_soft_timeout_seconds")
+    @classmethod
+    def validate_category_soft_timeout(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("LLM_CATEGORY_SOFT_TIMEOUT_SECONDS must be > 0")
+        return value
+
     @field_validator("llm_report_max_tokens")
     @classmethod
     def validate_report_max_tokens(cls, value: int) -> int:
@@ -149,11 +162,32 @@ class Settings(BaseSettings):
             raise ValueError("LLM_REPORT_TIMEOUT_SECONDS must be > 0")
         return value
 
+    @field_validator("llm_report_soft_timeout_seconds")
+    @classmethod
+    def validate_report_soft_timeout(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("LLM_REPORT_SOFT_TIMEOUT_SECONDS must be > 0")
+        return value
+
     @field_validator("llm_report_failure_cooldown_seconds")
     @classmethod
     def validate_report_failure_cooldown(cls, value: float) -> float:
         if value < 0:
             raise ValueError("LLM_REPORT_FAILURE_COOLDOWN_SECONDS must be >= 0")
+        return value
+
+    @field_validator("report_confirmation_budget_ms")
+    @classmethod
+    def validate_report_confirmation_budget(cls, value: int) -> int:
+        if value < 500:
+            raise ValueError("REPORT_CONFIRMATION_BUDGET_MS must be >= 500")
+        return value
+
+    @field_validator("bitrix_timeout_seconds")
+    @classmethod
+    def validate_bitrix_timeout(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("BITRIX_TIMEOUT_SECONDS must be > 0")
         return value
 
     @field_validator("langfuse_prompt_cache_seconds")
@@ -176,6 +210,8 @@ class Settings(BaseSettings):
 
     @property
     def langfuse_enabled(self) -> bool:
+        if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("RUN_LANGFUSE_LIVE_TESTS") != "1":
+            return False
         return bool(self.langfuse_host and self.langfuse_public_key and self.langfuse_secret_key)
 
 

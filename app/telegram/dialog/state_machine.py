@@ -92,15 +92,12 @@ def next_missing_step(data: DialogSessionData, user_phone: str | None) -> Dialog
     phone = str(data.phone or "").strip()
     saved_phone = str(user_phone or "").strip()
     problem_text = str(data.problem_text or "").strip()
-    entrance_value = data.entrance if "entrance" in data.model_fields_set else "__missing__"
 
     if is_unknown_jk(jk):
         return DialogStep.AWAITING_JK
     if not house:
         return DialogStep.AWAITING_HOUSE
-    if entrance_value == "__missing__":
-        return DialogStep.AWAITING_ENTRANCE
-    if entrance_value is not None and not str(entrance_value).strip():
+    if _entrance_answer_pending(data):
         return DialogStep.AWAITING_ENTRANCE
     if not apartment:
         return DialogStep.AWAITING_APARTMENT
@@ -113,6 +110,14 @@ def next_missing_step(data: DialogSessionData, user_phone: str | None) -> Dialog
     if not problem_text:
         return DialogStep.AWAITING_PROBLEM
     return DialogStep.AWAITING_REPORT_CONFIRM
+
+
+def _entrance_answer_pending(data: DialogSessionData) -> bool:
+    if "entrance" not in data.model_fields_set:
+        return True
+    if data.entrance is None:
+        return False
+    return not str(data.entrance).strip()
 
 
 def is_yes_text(text: str) -> bool:

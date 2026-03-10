@@ -54,7 +54,13 @@ def build_report_composition_payload(
     }
 
 
-def build_bitrix_audit_payload(*, bitrix_id: str | None, status: str, error: str | None = None) -> dict[str, Any]:
+def build_bitrix_audit_payload(
+    *,
+    bitrix_id: str | None,
+    status: str,
+    error: str | None = None,
+    telemetry: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "regulation": {
             "version": REGULATION_VERSION,
@@ -65,5 +71,5 @@ def build_bitrix_audit_payload(*, bitrix_id: str | None, status: str, error: str
             "bitrix_id": bitrix_id,
             "error": error,
         },
+        "telemetry": telemetry or {},
     }
-

@@ -39,16 +39,23 @@ def test_llm_report_tuning_defaults_and_validation() -> None:
         use_llm=False,
         llm_category_max_tokens=96,
         llm_category_timeout_seconds=2.0,
+        llm_category_soft_timeout_seconds=1.0,
         llm_report_max_tokens=256,
         llm_report_timeout_seconds=2.5,
+        llm_report_soft_timeout_seconds=1.2,
         llm_report_failure_cooldown_seconds=30.0,
+        bitrix_timeout_seconds=10.0,
         langfuse_prompt_cache_seconds=300,
     )
     assert settings.llm_category_max_tokens == 96
     assert settings.llm_category_timeout_seconds == 2.0
+    assert settings.llm_category_soft_timeout_seconds == 1.0
+    assert settings.llm_responder_enabled is True
     assert settings.llm_report_max_tokens == 256
     assert settings.llm_report_timeout_seconds == 2.5
+    assert settings.llm_report_soft_timeout_seconds == 1.2
     assert settings.llm_report_failure_cooldown_seconds == 30.0
+    assert settings.bitrix_timeout_seconds == 10.0
     assert settings.langfuse_prompt_cache_seconds == 300
 
     with pytest.raises(ValidationError):
@@ -58,10 +65,30 @@ def test_llm_report_tuning_defaults_and_validation() -> None:
         _ = Settings(telegram_bot_token="x", use_llm=False, llm_category_timeout_seconds=0)
 
     with pytest.raises(ValidationError):
+        _ = Settings(telegram_bot_token="x", use_llm=False, llm_category_soft_timeout_seconds=0)
+
+    with pytest.raises(ValidationError):
         _ = Settings(telegram_bot_token="x", use_llm=False, llm_report_max_tokens=32)
 
     with pytest.raises(ValidationError):
         _ = Settings(telegram_bot_token="x", use_llm=False, llm_report_timeout_seconds=0)
 
     with pytest.raises(ValidationError):
+        _ = Settings(telegram_bot_token="x", use_llm=False, llm_report_soft_timeout_seconds=0)
+
+    with pytest.raises(ValidationError):
         _ = Settings(telegram_bot_token="x", use_llm=False, llm_report_failure_cooldown_seconds=-1)
+
+    with pytest.raises(ValidationError):
+        _ = Settings(telegram_bot_token="x", use_llm=False, bitrix_timeout_seconds=0)
+
+
+def test_langfuse_is_disabled_by_default_under_pytest() -> None:
+    settings = Settings(
+        telegram_bot_token="x",
+        use_llm=True,
+        langfuse_host="http://langfuse.local",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+    )
+    assert settings.langfuse_enabled is False

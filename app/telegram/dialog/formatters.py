@@ -15,6 +15,7 @@ class ReportReviewView:
     apartment: str | None
     phone: str | None
     problem_text: str | None
+    category_options_hint: str | None = None
 
 
 @dataclass(slots=True)
@@ -49,21 +50,33 @@ class CreatedReportReplyParts:
 
 
 def build_report_review(view: ReportReviewView) -> str:
-    return "\n".join(
+    lines = [
+        "Проверьте, пожалуйста, заявку перед отправкой:",
+        f"Тип: {view.category_label}",
+        f"ЖК: {view.jk or 'не указан'}",
+        f"Дом: {view.house or 'не указан'}",
+        f"Подъезд: {view.entrance or 'не указан'}",
+        f"Квартира: {view.apartment or 'не указана'}",
+        f"Телефон: {view.phone or 'не указан'}",
+        f"Проблема: {view.problem_text or 'не указана'}",
+    ]
+    if view.category_options_hint:
+        lines.extend(["", view.category_options_hint])
+    lines.extend(
         [
-            "Проверьте, пожалуйста, заявку перед отправкой:",
-            f"Тип: {view.category_label}",
-            f"ЖК: {view.jk or 'не указан'}",
-            f"Дом: {view.house or 'не указан'}",
-            f"Подъезд: {view.entrance or 'не указан'}",
-            f"Квартира: {view.apartment or 'не указана'}",
-            f"Телефон: {view.phone or 'не указан'}",
-            f"Проблема: {view.problem_text or 'не указана'}",
             "",
             "Если все верно, подтвердите заявку. Если нет, выберите исправление.",
             "Можно исправить адрес, телефон, описание проблемы или категорию одним сообщением.",
         ]
     )
+    return "\n".join(lines)
+
+
+def build_category_options_hint(category_labels: list[str]) -> str:
+    options = [label.strip() for label in category_labels if label.strip()]
+    if not options:
+        return ""
+    return "Доступные типы заявок: " + ", ".join(options) + "."
 
 
 def build_saved_phone_prompt(phone: str | None) -> str:

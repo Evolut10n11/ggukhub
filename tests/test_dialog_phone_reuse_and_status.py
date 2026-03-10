@@ -263,6 +263,51 @@ async def test_report_correction_keyword_category_opens_category_selection(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_other_category_review_shows_available_category_options(tmp_path: Path) -> None:
+    services, engine = await _build_services(tmp_path / "other_category_options.db")
+    try:
+        user = await services.storage.upsert_user(telegram_id=410_071, name="User 410071")
+        await services.storage.update_user_phone(user.id, "+79990001122")
+
+        for text in ("привет", "ЖК Pride Park", "1", "1", "1", "Шумно в подъезде"):
+            await _send_user_text(services, 410_071, text)
+
+        review_replies = await _send_user_text(services, 410_071, "да")
+        combined = "\n".join(review_replies)
+        assert "Тип: Другое" in combined
+        assert "Доступные типы заявок:" in combined
+        assert "Нет воды" in combined
+        assert "Уборка" in combined
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_report_correction_prompt_lists_available_categories(tmp_path: Path) -> None:
+    services, engine = await _build_services(tmp_path / "correction_prompt_category_options.db")
+    try:
+        flow = (
+            "привет",
+            "ЖК Pride Park",
+            "1",
+            "1",
+            "1",
+            "+79990001122",
+            "Шумно в подъезде",
+        )
+        for text in flow:
+            await _send_user_text(services, 410_072, text)
+
+        replies = await _send_user_text(services, 410_072, "нет")
+        combined = "\n".join(replies)
+        assert "Доступные типы заявок:" in combined
+        assert "Лифт" in combined
+        assert "Домофон" in combined
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_invalid_problem_text_is_rejected_from_idle(tmp_path: Path) -> None:
     services, engine = await _build_services(tmp_path / "problem_idle_validation.db")
     try:
@@ -345,6 +390,25 @@ async def test_offtopic_problem_text_is_rejected_on_problem_step(tmp_path: Path)
         assert user is not None
         snapshot = await services.storage.get_session(user.id)
         assert snapshot.step == "awaiting_problem"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_smell_in_corridor_is_classified_as_cleaning_in_review(tmp_path: Path) -> None:
+    services, engine = await _build_services(tmp_path / "smell_corridor_cleaning.db")
+    try:
+        user = await services.storage.upsert_user(telegram_id=410_013, name="User 410013")
+        await services.storage.update_user_phone(user.id, "+79990001122")
+
+        for text in ("привет", "ЖК Grand Comfort", "1", "1", "1", "Пахнет в коридоре"):
+            _ = await _send_user_text(services, 410_013, text)
+
+        replies = await _send_user_text(services, 410_013, "да")
+
+        combined = "\n".join(replies)
+        assert "Тип: Уборка" in combined
+        assert "Проблема: Пахнет в коридоре" in combined
     finally:
         await engine.dispose()
 

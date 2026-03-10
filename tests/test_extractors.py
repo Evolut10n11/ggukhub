@@ -61,11 +61,33 @@ def test_extract_phone_helper_normalizes_number() -> None:
 
 
 def test_extract_address_helpers_parse_tokens_independently() -> None:
-    assert extract_house("\u0434\u043e\u043c 15") == "15"
-    assert extract_entrance("\u043f\u043e\u0434\u044a\u0435\u0437\u0434 4") == "4"
-    assert extract_apartment("\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0430 99") == "99"
+    assert extract_house("дом 15") == "15"
+    assert extract_entrance("подъезд 4") == "4"
+    assert extract_apartment("квартира 99") == "99"
 
 
 def test_extract_housing_complex_helper_handles_partial_name() -> None:
     complexes = ["Pride Park", "Green Park Солотча"]
     assert extract_housing_complex("ЖК Прайд Парк, нет воды", complexes) == "Pride Park"
+
+
+def test_extract_housing_complex_does_not_match_generic_park_noise() -> None:
+    complexes = ["Pride Park", "Green Park Солотча"]
+    assert extract_housing_complex("Рядом с парком грязно и скользко", complexes) is None
+
+
+def test_extract_phone_ignores_short_or_invalid_numbers() -> None:
+    assert extract_phone("Наберите мне на 12345") is None
+    assert extract_phone("Телефон: 8-900") is None
+
+
+def test_extract_address_helpers_do_not_confuse_house_and_apartment() -> None:
+    text = "подъезд 4, квартира 99"
+    assert extract_house(text) is None
+    assert extract_entrance(text) == "4"
+    assert extract_apartment(text) == "99"
+
+
+def test_extract_housing_complex_prefers_transliterated_match_over_partial_noise() -> None:
+    complexes = ["Pride Park", "Grand Comfort-3"]
+    assert extract_housing_complex("ЖК Гранд Комфорт 3, пахнет в коридоре", complexes) == "Grand Comfort-3"

@@ -83,4 +83,7 @@ async def test_dialog_category_service_preserves_llm_fallback_metadata() -> None
     assert result.timed_out is True
     assert result.fallback_used is True
     assert result.raw_output == "???"
-    assert result.metadata == {"reason": "timeout", "rule_category": "other"}
+    assert result.metadata["reason"] == "timeout"
+    assert result.metadata["rule_category"] == "other"
+    assert result.metadata["telemetry"]["flow_name"] == "category_resolution"
+    assert result.metadata["telemetry"]["step_name"] == "resolve_category"

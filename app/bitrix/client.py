@@ -48,6 +48,10 @@ class BitrixApiClient:
     def enabled(self) -> bool:
         return self._settings.bitrix_enabled
 
+    @property
+    def timeout_seconds(self) -> float:
+        return self._settings.bitrix_timeout_seconds
+
     def build_url(self, method: str) -> tuple[str, dict[str, str]]:
         if self._settings.bitrix_webhook_url:
             base = self._settings.bitrix_webhook_url.rstrip("/")
@@ -102,7 +106,7 @@ class BitrixApiClient:
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
-                timeout=15.0,
+                timeout=self.timeout_seconds,
                 transport=self._transport,
             )
         return self._client

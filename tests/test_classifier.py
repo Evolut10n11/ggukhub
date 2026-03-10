@@ -36,3 +36,8 @@ def test_classifies_kholodno_as_heating() -> None:
 def test_classifies_smell_in_entrance_as_cleaning() -> None:
     classifier = _classifier()
     assert classifier.classify("В подъезде пахнет ужасно") == "cleaning"
+
+
+def test_classifies_smell_in_corridor_as_cleaning() -> None:
+    classifier = _classifier()
+    assert classifier.classify("Пахнет в коридоре") == "cleaning"

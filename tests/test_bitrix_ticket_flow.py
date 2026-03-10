@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -217,6 +218,10 @@ async def test_dialog_flow_creates_report_and_persists_bitrix_id(tmp_path: Path)
         stages = [item.stage for item in audits]
         assert "report_created" in stages
         assert "bitrix_synced" in stages
+        bitrix_audit = next(item for item in audits if item.stage == "bitrix_synced")
+        payload = json.loads(bitrix_audit.payload_json)
+        assert payload["telemetry"]["flow_name"] == "bitrix_sync"
+        assert payload["telemetry"]["bitrix_sync_outcome"] == "synced"
 
         assert any("Проверьте, пожалуйста, заявку перед отправкой" in text for text in replies)
         assert any("Сводка по заявке" in text for text in replies)
@@ -251,6 +256,10 @@ async def test_dialog_flow_bitrix_failure_keeps_local_report_and_logs_failure(tm
         stages = [item.stage for item in audits]
         assert "report_created" in stages
         assert "bitrix_sync_failed" in stages
+        bitrix_audit = next(item for item in audits if item.stage == "bitrix_sync_failed")
+        payload = json.loads(bitrix_audit.payload_json)
+        assert payload["telemetry"]["flow_name"] == "bitrix_sync"
+        assert payload["telemetry"]["bitrix_sync_outcome"] == "failed"
 
         assert any("Передачу в Bitrix24 уточняю вручную" in text for _, text in notifier.messages)
     finally:

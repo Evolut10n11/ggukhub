@@ -31,6 +31,10 @@ class BitrixTicketService:
     def enabled(self) -> bool:
         return self._client.enabled
 
+    @property
+    def timeout_seconds(self) -> float:
+        return self._client.timeout_seconds
+
     async def create_ticket(self, report: Report, user: User) -> str:
         payload_input = BitrixTicketPayloadInput(
             local_report_id=report.id,

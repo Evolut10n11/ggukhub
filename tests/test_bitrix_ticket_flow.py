@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import os
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -11,7 +9,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.bitrix.client import BitrixClient, BitrixClientError
+from app.bitrix.client import BitrixApiClient, BitrixClientError
+from app.bitrix.service import BitrixTicketService
 from app.config.settings import Settings
 from app.core.classifier import CategoryClassifier
 from app.core.llm_category import LLMCategoryResolver
@@ -23,7 +22,6 @@ from app.core.utils import load_json
 from app.incidents.detector import SpikeDetector
 from app.incidents.service import IncidentService
 from app.responders.rule_responder import RuleResponder
-from app.telegram.handlers import dialog as dialog_module
 from app.telegram.handlers.dialog import _process_text_dialog
 
 
@@ -85,25 +83,6 @@ class _MessageStub:
         self.answers.append(text)
 
 
-@pytest.fixture(autouse=True)
-def _reset_dialog_runtime_state() -> None:
-    dialog_module._user_locks.clear()
-    dialog_module._bg_tasks.clear()
-
-
-async def _wait_for_background_tasks(timeout_seconds: float = 1.5) -> None:
-    deadline = time.perf_counter() + timeout_seconds
-    while time.perf_counter() < deadline:
-        pending = [task for task in list(dialog_module._bg_tasks) if not task.done()]
-        if not pending:
-            return
-        await asyncio.sleep(0.01)
-
-    pending = [task for task in list(dialog_module._bg_tasks) if not task.done()]
-    if pending:
-        await asyncio.gather(*pending, return_exceptions=True)
-
-
 async def _build_services(db_path: Path, *, bitrix_client: Any, notifier: _NotifierStub) -> tuple[AppServices, Any]:
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_path}",
@@ -133,7 +112,8 @@ async def _build_services(db_path: Path, *, bitrix_client: Any, notifier: _Notif
         incidents=incidents,
         responder=RuleResponder(),
         speech=_SpeechStub(),
-        bitrix_client=bitrix_client,
+        bitrix_client=SimpleNamespace(enabled=bitrix_client.enabled),
+        bitrix_service=bitrix_client,
         bitrix_webhook=_BitrixWebhookStub(),
         notifier=notifier,
         housing_complexes=list(load_json(Path("data/housing_complexes.json"))),
@@ -168,7 +148,8 @@ async def test_bitrix_client_create_ticket_builds_expected_payload(monkeypatch: 
         use_llm=False,
         bitrix_webhook_url="https://bitrix.example/rest/1/webhook",
     )
-    client = BitrixClient(settings)
+    api_client = BitrixApiClient(settings)
+    client = BitrixTicketService(settings=settings, client=api_client)
     report = Report(
         id=42,
         user_id=1,
@@ -189,7 +170,7 @@ async def test_bitrix_client_create_ticket_builds_expected_payload(monkeypatch: 
         captured["payload"] = payload
         return {"result": 90001}
 
-    monkeypatch.setattr(client, "_call", fake_call)
+    monkeypatch.setattr(api_client, "call", fake_call)
 
     bitrix_id = await client.create_ticket(report=report, user=user)
     assert bitrix_id == "90001"
@@ -216,7 +197,7 @@ async def test_dialog_flow_creates_report_and_persists_bitrix_id(tmp_path: Path)
 
     try:
         replies = await _run_full_dialog_flow(services, user_id=300_001, phone="+79990001122")
-        await _wait_for_background_tasks()
+        await services.dialog_runtime.wait_background_tasks()
 
         assert bitrix_stub.calls, "Bitrix create_ticket was not called"
         call = bitrix_stub.calls[0]
@@ -237,6 +218,7 @@ async def test_dialog_flow_creates_report_and_persists_bitrix_id(tmp_path: Path)
         assert "report_created" in stages
         assert "bitrix_synced" in stages
 
+        assert any("Проверьте, пожалуйста, заявку перед отправкой" in text for text in replies)
         assert any("Сводка по заявке" in text for text in replies)
         assert any("Bitrix24" in text for text in replies)
         assert any("B24-7001" in text for _, text in notifier.messages)
@@ -252,7 +234,7 @@ async def test_dialog_flow_bitrix_failure_keeps_local_report_and_logs_failure(tm
 
     try:
         _ = await _run_full_dialog_flow(services, user_id=300_002, phone="+79990002233")
-        await _wait_for_background_tasks()
+        await services.dialog_runtime.wait_background_tasks()
 
         user = await services.storage.get_user_by_telegram_id(300_002)
         assert user is not None
@@ -276,6 +258,83 @@ async def test_dialog_flow_bitrix_failure_keeps_local_report_and_logs_failure(tm
 
 
 @pytest.mark.asyncio
+async def test_report_is_not_created_until_final_confirmation(tmp_path: Path) -> None:
+    db_path = tmp_path / "bitrix_wait_confirm.db"
+    notifier = _NotifierStub()
+    bitrix_stub = _BitrixCreateStub(bitrix_id="B24-9001")
+    services, engine = await _build_services(db_path, bitrix_client=bitrix_stub, notifier=notifier)
+
+    try:
+        flow = [
+            "привет",
+            "ЖК Pride Park",
+            "5",
+            "3",
+            "78",
+            "+79990001122",
+            "Лифт не работает",
+        ]
+        replies: list[str] = []
+        for text in flow:
+            message = _MessageStub(user_id=300_003)
+            await _process_text_dialog(message, services, text, from_voice=False)
+            replies.extend(message.answers)
+
+        user = await services.storage.get_user_by_telegram_id(300_003)
+        assert user is not None
+
+        async with services.storage._session_factory() as session:
+            stmt = select(Report).where(Report.user_id == user.id).order_by(Report.id.desc())
+            result = await session.execute(stmt)
+            report = result.scalar_one_or_none()
+
+        assert report is None
+        assert any("Проверьте, пожалуйста, заявку перед отправкой" in text for text in replies)
+        assert not bitrix_stub.calls
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_report_correction_step_allows_fixing_category_before_creation(tmp_path: Path) -> None:
+    db_path = tmp_path / "bitrix_edit_before_confirm.db"
+    notifier = _NotifierStub()
+    bitrix_stub = _BitrixCreateStub(bitrix_id="B24-9002")
+    services, engine = await _build_services(db_path, bitrix_client=bitrix_stub, notifier=notifier)
+
+    try:
+        flow = [
+            "привет",
+            "ЖК Pride Park",
+            "5",
+            "3",
+            "78",
+            "+79990001122",
+            "Лифт не работает",
+            "нет",
+            "Нет воды",
+            "да",
+        ]
+        for text in flow:
+            message = _MessageStub(user_id=300_004)
+            await _process_text_dialog(message, services, text, from_voice=False)
+
+        await services.dialog_runtime.wait_background_tasks()
+        user = await services.storage.get_user_by_telegram_id(300_004)
+        assert user is not None
+
+        async with services.storage._session_factory() as session:
+            stmt = select(Report).where(Report.user_id == user.id).order_by(Report.id.desc())
+            result = await session.execute(stmt)
+            report = result.scalar_one_or_none()
+
+        assert report is not None
+        assert report.category == "water_off"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(
     os.getenv("RUN_BITRIX_LIVE_TESTS") != "1",
     reason="Set RUN_BITRIX_LIVE_TESTS=1 to run live Bitrix smoke",
@@ -289,7 +348,7 @@ async def test_bitrix_live_create_ticket_smoke() -> None:
         use_llm=False,
         bitrix_webhook_url=os.getenv("BITRIX_WEBHOOK_URL"),
     )
-    client = BitrixClient(settings)
+    client = BitrixTicketService(settings=settings, client=BitrixApiClient(settings))
     report = Report(
         id=99001,
         user_id=1,

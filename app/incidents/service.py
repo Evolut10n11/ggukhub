@@ -59,4 +59,3 @@ class IncidentService:
             incident_id=incident.id,
             public_message=incident.public_message,
         )
-

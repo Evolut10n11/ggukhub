@@ -55,7 +55,7 @@ async def test_resolver_returns_code_from_agent_output(monkeypatch: pytest.Monke
     assert getattr(config, "model") == ALLOWED_LLM_MODEL
     assert getattr(config, "base_url") == "http://qwen.local/v1"
     model_settings = getattr(config, "model_settings")
-    assert model_settings["max_tokens"] >= 512
+    assert model_settings["max_tokens"] == 96
 
 
 @pytest.mark.asyncio
@@ -77,6 +77,36 @@ async def test_resolver_disabled_when_llm_off() -> None:
     resolver = LLMCategoryResolver(settings=_settings(use_llm=False), classifier=_classifier())
     assert resolver.enabled is False
     category = await resolver.resolve("anything")
+    assert category is None
+
+
+@pytest.mark.asyncio
+async def test_resolver_returns_none_when_agent_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_openai_model_from_config(_: object) -> object:
+        return object()
+
+    class SlowAgent:
+        async def run(self, **kwargs: object) -> SimpleNamespace:
+            _ = kwargs
+            import asyncio
+
+            await asyncio.sleep(0.05)
+            return SimpleNamespace(output="elevator")
+
+    monkeypatch.setattr(llm_category_module, "openai_model_from_config", fake_openai_model_from_config)
+    monkeypatch.setattr(llm_category_module, "_category_agent", SlowAgent())
+
+    settings = Settings(
+        telegram_bot_token="x",
+        use_llm=True,
+        llm_model=ALLOWED_LLM_MODEL,
+        llm_base_url="http://qwen.local/v1",
+        llm_max_tokens=8192,
+        llm_category_timeout_seconds=0.01,
+    )
+    resolver = LLMCategoryResolver(settings=settings, classifier=_classifier())
+
+    category = await resolver.resolve("Lift is broken")
     assert category is None
 
 

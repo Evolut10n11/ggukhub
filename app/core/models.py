@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import BIGINT, Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import BIGINT, Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from app.core.enums import IncidentStatus, ReportStatus
 
 
 def utcnow() -> datetime:
@@ -50,7 +52,7 @@ class Report(Base):
     category: Mapped[str] = mapped_column(String(64), index=True)
     text: Mapped[str] = mapped_column(Text)
     scope_key: Mapped[str] = mapped_column(String(512), index=True)
-    status: Mapped[str] = mapped_column(String(64), default="new")
+    status: Mapped[str] = mapped_column(String(64), default=ReportStatus.NEW.value)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     bitrix_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
@@ -65,7 +67,7 @@ class Incident(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     scope_key: Mapped[str] = mapped_column(String(512), index=True)
     category: Mapped[str] = mapped_column(String(64), index=True)
-    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    status: Mapped[str] = mapped_column(String(32), default=IncidentStatus.ACTIVE.value, index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     public_message: Mapped[str] = mapped_column(Text)
@@ -74,7 +76,6 @@ class Incident(Base):
     events: Mapped[list["IncidentEvent"]] = relationship(back_populates="incident")
 
     __table_args__ = (Index("ix_incidents_scope_status", "scope_key", "status"),)
-
 
 class IncidentEvent(Base):
     __tablename__ = "incident_events"
@@ -86,6 +87,8 @@ class IncidentEvent(Base):
 
     incident: Mapped[Incident] = relationship(back_populates="events")
     report: Mapped[Report] = relationship(back_populates="incident_events")
+
+    __table_args__ = (UniqueConstraint("incident_id", "report_id", name="uq_incident_event_report"),)
 
 
 class BitrixEvent(Base):

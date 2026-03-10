@@ -85,6 +85,7 @@ async def _build_services(db_path: Path) -> tuple[AppServices, object]:
         responder=RuleResponder(),
         speech=_SpeechStub(),
         bitrix_client=_BitrixStub(),
+        bitrix_service=_BitrixStub(),
         bitrix_webhook=_BitrixWebhookStub(),
         notifier=_NotifierStub(),
         housing_complexes=list(load_json(Path("data/housing_complexes.json"))),
@@ -147,4 +148,3 @@ async def test_concurrent_20_users_flow_latency(tmp_path: Path) -> None:
     # Conservative thresholds for local dev machine to catch major regressions.
     assert total_elapsed < 8.0
     assert p95_latency < 1.2
-

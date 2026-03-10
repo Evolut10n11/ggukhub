@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass
@@ -76,6 +77,8 @@ class LLMCategoryResolver:
         self._categories = classifier.categories()
         self._labels = {code: classifier.label(code) for code in self._categories}
         self._lookup = {code.lower(): code for code in self._categories}
+        self._instructions_text = self._build_instructions()
+        self._model: object | None = None
 
     @property
     def enabled(self) -> bool:
@@ -90,28 +93,25 @@ class LLMCategoryResolver:
             return None
 
         try:
-            config = AgentConfig(
-                model=self._settings.llm_model,
-                base_url=self._settings.llm_base_url,
-                api_key=self._settings.llm_api_key or "local-no-key",
-                model_settings={
-                    # Qwen in your gateway emits reasoning; classification needs enough budget
-                    # to reach final content token.
-                    "max_tokens": max(512, min(self._settings.llm_max_tokens, 1024)),
-                    "temperature": 0,
-                },
-            )
-            model = openai_model_from_config(config)
             latin_source = _transliterate_ru(source)
             if latin_source != source.lower():
                 user_prompt = f"Issue text: {source}\nTransliterated text: {latin_source}"
             else:
                 user_prompt = f"Issue text: {source}"
-            result = await _category_agent.run(
-                user_prompt=user_prompt,
-                deps=_Deps(instructions=self._build_instructions()),
-                model=model,
+            result = await asyncio.wait_for(
+                _category_agent.run(
+                    user_prompt=user_prompt,
+                    deps=_Deps(instructions=self._instructions_text),
+                    model=self._get_model(),
+                ),
+                timeout=self._settings.llm_category_timeout_seconds,
             )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "LLM category resolve timed out after %.2fs",
+                self._settings.llm_category_timeout_seconds,
+            )
+            return None
         except Exception as error:
             logger.warning("LLM category resolve failed: %s", error)
             return None
@@ -134,7 +134,10 @@ class LLMCategoryResolver:
             "cleaning": "dirty entrance, trash, cleaning needed",
             "other": "unclear or none of the above",
         }
-        categories_text = "\n".join(f"- {code}: {categories_help.get(code, self._labels.get(code, code))}" for code in self._categories)
+        categories_text = "\n".join(
+            f"- {code}: {categories_help.get(code, self._labels.get(code, code))}"
+            for code in self._categories
+        )
         return (
             "You are a strict classifier for housing maintenance incidents.\n"
             "Choose exactly ONE category code from the list.\n"
@@ -144,6 +147,22 @@ class LLMCategoryResolver:
             f"Category list:\n{categories_text}"
         )
 
+    def _get_model(self) -> object:
+        if self._model is not None:
+            return self._model
+
+        config = AgentConfig(
+            model=self._settings.llm_model,
+            base_url=self._settings.llm_base_url,
+            api_key=self._settings.llm_api_key or "local-no-key",
+            model_settings={
+                "max_tokens": min(self._settings.llm_max_tokens, self._settings.llm_category_max_tokens),
+                "temperature": 0,
+            },
+        )
+        self._model = openai_model_from_config(config)
+        return self._model
+
     def _parse_category(self, content: str) -> str | None:
         value = content.strip().lower()
         if not value:
@@ -152,7 +171,6 @@ class LLMCategoryResolver:
         if value in self._lookup:
             return self._lookup[value]
 
-        # JSON-style response: {"category":"elevator"}
         for token in re.findall(r"[a-z_]+", value):
             if token in self._lookup:
                 return self._lookup[token]

@@ -6,8 +6,7 @@ import logging
 import os
 from pathlib import Path
 
-from app.core.bootstrap import build_services
-from app.core.db import close_db, init_db
+from app.core.runtime import create_app_runtime
 from app.telegram.bot import run_polling
 
 LOCK_FILE = Path(".bot.lock")
@@ -21,7 +20,7 @@ logging.basicConfig(
 def _is_process_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-    except Exception:
+    except OSError:
         return False
     return True
 
@@ -42,13 +41,12 @@ def _acquire_lock() -> None:
 
 async def _main() -> None:
     _acquire_lock()
-    services = build_services()
-    await init_db()
+    runtime = create_app_runtime()
+    await runtime.init()
     try:
-        await run_polling(services)
+        await run_polling(runtime.services)
     finally:
-        await services.notifier.close()
-        await close_db()
+        await runtime.close()
 
 
 if __name__ == "__main__":

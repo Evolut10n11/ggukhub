@@ -51,3 +51,18 @@ def build_category_select_keyboard() -> InlineKeyboardMarkup:
     builder.adjust(1)
     return builder.as_markup()
 
+
+def build_report_confirm_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Да, все верно", callback_data="report_yes")
+    builder.button(text="Нет, исправить", callback_data="report_edit")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def build_phone_reuse_keyboard(phone: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=f"Использовать {phone}", callback_data="phone_reuse_yes")
+    builder.button(text="Указать другой", callback_data="phone_reuse_other")
+    builder.adjust(1)
+    return builder.as_markup()

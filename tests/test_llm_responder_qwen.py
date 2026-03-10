@@ -46,7 +46,7 @@ async def test_qwen_responder_uses_qwen_config_and_returns_llm_output(monkeypatc
     assert getattr(config, "model") == ALLOWED_LLM_MODEL
     assert getattr(config, "base_url") == "http://127.0.0.1:8080/v1"
     model_settings = getattr(config, "model_settings")
-    assert model_settings["max_tokens"] == 512
+    assert model_settings["max_tokens"] == settings.llm_report_max_tokens
 
     run_kwargs = captured["run_kwargs"]
     assert "model" in run_kwargs
@@ -79,6 +79,37 @@ async def test_qwen_responder_falls_back_to_rules_when_agent_fails(monkeypatch: 
 
     output = await responder.report_created(local_id=77, bitrix_id=None)
     assert "77" in output
+
+
+@pytest.mark.asyncio
+async def test_qwen_responder_falls_back_to_rules_when_agent_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_openai_model_from_config(_: object) -> object:
+        return object()
+
+    class SlowAgent:
+        async def run(self, **_: object) -> SimpleNamespace:
+            import asyncio
+
+            await asyncio.sleep(0.05)
+            return SimpleNamespace(output="late output")
+
+    monkeypatch.setattr(llm_module, "openai_model_from_config", fake_openai_model_from_config)
+    monkeypatch.setattr(llm_module, "_writer_agent", SlowAgent())
+
+    settings = Settings(
+        telegram_bot_token="x",
+        use_llm=True,
+        llm_model=ALLOWED_LLM_MODEL,
+        llm_base_url="http://127.0.0.1:8080/v1",
+        llm_report_timeout_seconds=0.01,
+        langfuse_host=None,
+        langfuse_public_key=None,
+        langfuse_secret_key=None,
+    )
+    responder = LLMResponder(settings)
+
+    output = await responder.report_created(local_id=78, bitrix_id=None)
+    assert "78" in output
 
 
 @pytest.mark.asyncio

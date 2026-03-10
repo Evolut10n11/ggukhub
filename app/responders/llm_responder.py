@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import time
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,10 +53,16 @@ class LLMResponder(BaseResponder):
         self._housing_complexes = self._load_housing_complexes()
         self._category_codes = self._load_category_codes()
         self._domain_context = self._build_domain_context()
+        self._few_shot_history = self._build_few_shot_history()
 
         self._langfuse: Langfuse | None = None
         self._langfuse_prompt_name = settings.langfuse_prompt_name
         self._langfuse_prompt_label = settings.langfuse_prompt_label
+        self._cached_prompt_bundle: tuple[str, Any | None] | None = None
+        self._cached_prompt_expires_at = 0.0
+        self._cached_prompt_model_key: int | None = None
+        self._cached_prompt_model: Any | None = None
+        self._default_writer_model: Any | None = None
 
         if settings.langfuse_enabled:
             try:
@@ -75,6 +83,9 @@ class LLMResponder(BaseResponder):
             except Exception as error:
                 logger.warning("Langfuse setup failed: %s", error)
                 self._langfuse = None
+
+        if not self._langfuse_prompt_name:
+            self._default_writer_model = self._build_model(prompt=None)
 
     @staticmethod
     def _load_housing_complexes() -> list[str]:
@@ -127,6 +138,13 @@ class LLMResponder(BaseResponder):
     def _load_prompt_instructions(self) -> tuple[str, Any | None]:
         instructions = self._system
         prompt: Any | None = None
+        if not self._langfuse or not self._langfuse_prompt_name:
+            return instructions, prompt
+
+        now = time.monotonic()
+        if self._cached_prompt_bundle is not None and now < self._cached_prompt_expires_at:
+            return self._cached_prompt_bundle
+
         if self._langfuse and self._langfuse_prompt_name:
             try:
                 prompt = self._langfuse.get_prompt(
@@ -134,8 +152,12 @@ class LLMResponder(BaseResponder):
                     label=self._langfuse_prompt_label,
                 )
                 instructions = prompt.compile()
+                self._cached_prompt_bundle = (instructions, prompt)
+                self._cached_prompt_expires_at = now + self._settings.langfuse_prompt_cache_seconds
             except Exception as error:
                 logger.warning("Failed to load prompt from Langfuse, fallback to local prompt: %s", error)
+                if self._cached_prompt_bundle is not None:
+                    return self._cached_prompt_bundle
                 prompt = None
         return instructions, prompt
 
@@ -167,13 +189,16 @@ class LLMResponder(BaseResponder):
             supports = supports or hasattr(model.wrapped, "attributes") or hasattr(model.wrapped, "_attributes")
         return supports
 
+    def _report_max_tokens(self) -> int:
+        return max(64, min(self._settings.llm_max_tokens, self._settings.llm_report_max_tokens))
+
     def _build_model(self, prompt: Any | None) -> Any:
         config = AgentConfig(
             model=self._settings.llm_model,
             base_url=self._settings.llm_base_url,
             api_key=self._settings.llm_api_key or "local-no-key",
             model_settings={
-                "max_tokens": self._settings.llm_max_tokens,
+                "max_tokens": self._report_max_tokens(),
                 "temperature": 0.2,
             },
         )
@@ -208,7 +233,7 @@ class LLMResponder(BaseResponder):
             model=self._settings.llm_model,
             model_parameters={
                 "temperature": 0.2,
-                "max_tokens": self._settings.llm_max_tokens,
+                "max_tokens": self._report_max_tokens(),
                 "stage": stage,
             },
         )
@@ -291,10 +316,10 @@ class LLMResponder(BaseResponder):
             return await self._fallback.report_created(local_id, bitrix_id)
 
         instructions, prompt = self._load_prompt_instructions()
-        few_shot_history = self._build_few_shot_history()
+        few_shot_history = self._few_shot_history
         user_prompt = self._build_report_prompt(local_id, bitrix_id)
         summary_input = self._build_summary_input(local_id, bitrix_id)
-        writer_model = self._build_model(prompt)
+        writer_model = self._resolve_writer_model(prompt)
         writer_deps = _WriterDeps(
             instructions=instructions,
             few_shot_history=few_shot_history,
@@ -307,17 +332,24 @@ class LLMResponder(BaseResponder):
             bitrix_id=bitrix_id,
         ) as flow_obs:
             try:
-                output = await self._run_writer_pipeline(
-                    writer_deps=writer_deps,
-                    user_prompt=user_prompt,
-                    summary_input=summary_input,
-                    few_shot_history=few_shot_history,
-                    flow_obs=flow_obs,
+                output = await asyncio.wait_for(
+                    self._run_writer_pipeline(
+                        writer_deps=writer_deps,
+                        user_prompt=user_prompt,
+                        summary_input=summary_input,
+                        few_shot_history=few_shot_history,
+                        flow_obs=flow_obs,
+                    ),
+                    timeout=self._settings.llm_report_timeout_seconds,
                 )
                 if output:
                     if flow_obs is not None:
                         flow_obs.update(output=output, metadata={"mode": "writer_pipeline"})
                     return output
+            except asyncio.TimeoutError:
+                logger.warning("Writer pipeline timed out after %.2fs, fallback to rules", self._settings.llm_report_timeout_seconds)
+                if flow_obs is not None:
+                    flow_obs.update(level="WARNING", status_message="writer_timeout_rule_fallback")
             except Exception as error:
                 logger.warning("Writer pipeline failed, fallback to rules: %s", error)
                 if flow_obs is not None:
@@ -331,3 +363,17 @@ class LLMResponder(BaseResponder):
                     status_message="llm_unavailable_rule_fallback",
                 )
             return fallback_output
+
+    def _resolve_writer_model(self, prompt: Any | None) -> Any:
+        if prompt is None:
+            if self._default_writer_model is None:
+                self._default_writer_model = self._build_model(prompt=None)
+            return self._default_writer_model
+
+        model_key = id(prompt)
+        if self._cached_prompt_model is not None and self._cached_prompt_model_key == model_key:
+            return self._cached_prompt_model
+
+        self._cached_prompt_model = self._build_model(prompt)
+        self._cached_prompt_model_key = model_key
+        return self._cached_prompt_model

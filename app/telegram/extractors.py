@@ -42,6 +42,19 @@ _RU_TO_LATIN = {
     "я": "ya",
 }
 
+_HOUSE_PATTERNS = (
+    r"\bдом(?:\s+номер)?\s*№?\s*([0-9]+[0-9а-яa-z/-]*)",
+    r"\bд\.\s*([0-9]+[0-9а-яa-z/-]*)",
+)
+_ENTRANCE_PATTERNS = (
+    r"\bпод(?:ъ|ь)?езд\s*№?\s*([0-9]+[0-9а-яa-z/-]*)",
+    r"\bпод\.\s*([0-9]+[0-9а-яa-z/-]*)",
+)
+_APARTMENT_PATTERNS = (
+    r"\bкв(?:артира)?\.?\s*№?\s*([0-9]+[0-9а-яa-z/-]*)",
+    r"\bап(?:артамент)?\.?\s*([0-9]+[0-9а-яa-z/-]*)",
+)
+
 
 @dataclass(slots=True)
 class ExtractedReportContext:
@@ -58,41 +71,27 @@ def extract_report_context(text: str, housing_complexes: list[str]) -> Extracted
         return ExtractedReportContext()
 
     return ExtractedReportContext(
-        jk=_extract_jk(source, housing_complexes),
-        house=_extract_token(
-            source,
-            (
-                r"\bдом(?:\s+номер)?\s*№?\s*([0-9]+[0-9а-яa-z/-]*)",
-                r"\bд\.\s*([0-9]+[0-9а-яa-z/-]*)",
-            ),
-        ),
-        entrance=_extract_token(
-            source,
-            (
-                r"\bпод(?:ъ|ь)?езд\s*№?\s*([0-9]+[0-9а-яa-z/-]*)",
-                r"\bпод\.\s*([0-9]+[0-9а-яa-z/-]*)",
-            ),
-        ),
-        apartment=_extract_token(
-            source,
-            (
-                r"\bкв(?:артира)?\.?\s*№?\s*([0-9]+[0-9а-яa-z/-]*)",
-                r"\bап(?:артамент)?\.?\s*([0-9]+[0-9а-яa-z/-]*)",
-            ),
-        ),
-        phone=_extract_phone(source),
+        jk=extract_housing_complex(source, housing_complexes),
+        house=extract_house(source),
+        entrance=extract_entrance(source),
+        apartment=extract_apartment(source),
+        phone=extract_phone(source),
     )
 
 
-def _extract_token(text: str, patterns: tuple[str, ...]) -> str | None:
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-    return None
+def extract_house(text: str) -> str | None:
+    return _extract_token(text, _HOUSE_PATTERNS)
 
 
-def _extract_phone(text: str) -> str | None:
+def extract_entrance(text: str) -> str | None:
+    return _extract_token(text, _ENTRANCE_PATTERNS)
+
+
+def extract_apartment(text: str) -> str | None:
+    return _extract_token(text, _APARTMENT_PATTERNS)
+
+
+def extract_phone(text: str) -> str | None:
     for candidate in re.findall(r"(\+?\d[\d\-\(\)\s]{9,}\d)", text):
         phone = normalize_phone(candidate)
         if phone is not None:
@@ -100,7 +99,7 @@ def _extract_phone(text: str) -> str | None:
     return None
 
 
-def _extract_jk(text: str, housing_complexes: list[str]) -> str | None:
+def extract_housing_complex(text: str, housing_complexes: list[str]) -> str | None:
     if not housing_complexes:
         return None
 
@@ -108,12 +107,15 @@ def _extract_jk(text: str, housing_complexes: list[str]) -> str | None:
     if not normalized_text:
         return None
 
-    by_length = sorted(housing_complexes, key=len, reverse=True)
-    for complex_name in by_length:
+    for complex_name in sorted(housing_complexes, key=len, reverse=True):
         if _normalize_for_match(complex_name) in normalized_text:
             return complex_name
 
-    match = re.search(r"(?:жк|жил(?:ой|ого)?\s+комплекс)\s*[«\"']?([^,.;\n]{2,80})", text, flags=re.IGNORECASE)
+    match = re.search(
+        r"(?:жк|жил(?:ой|ого)?\s+комплекс)\s*[«\"']?([^,.;\n]{2,80})",
+        text,
+        flags=re.IGNORECASE,
+    )
     if not match:
         return None
 
@@ -122,6 +124,14 @@ def _extract_jk(text: str, housing_complexes: list[str]) -> str | None:
         return None
 
     return _best_complex_match(candidate, housing_complexes)
+
+
+def _extract_token(text: str, patterns: tuple[str, ...]) -> str | None:
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return None
 
 
 def _best_complex_match(candidate: str, housing_complexes: list[str]) -> str | None:

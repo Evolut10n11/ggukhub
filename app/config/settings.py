@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     llm_api_key: str | None = Field(default=None, alias="LLM_API_KEY")
     llm_max_tokens: int = Field(default=12288, alias="LLM_MAX_TOKENS")
     llm_few_shot_limit: int = Field(default=20, alias="LLM_FEW_SHOT_LIMIT")
+    llm_category_max_tokens: int = Field(default=96, alias="LLM_CATEGORY_MAX_TOKENS")
+    llm_category_timeout_seconds: float = Field(default=2.0, alias="LLM_CATEGORY_TIMEOUT_SECONDS")
+    llm_report_max_tokens: int = Field(default=256, alias="LLM_REPORT_MAX_TOKENS")
+    llm_report_timeout_seconds: float = Field(default=2.5, alias="LLM_REPORT_TIMEOUT_SECONDS")
     speech_enabled: bool = Field(default=False, alias="SPEECH_ENABLED")
     speech_base_url: str = Field(default="http://192.168.130.159:8080/v1", alias="SPEECH_BASE_URL")
     speech_api_key: str | None = Field(default=None, alias="SPEECH_API_KEY")
@@ -75,6 +79,7 @@ class Settings(BaseSettings):
     langfuse_environment: str = Field(default="default", alias="LANGFUSE_ENVIRONMENT")
     langfuse_prompt_name: str | None = Field(default=None, alias="LANGFUSE_PROMPT_NAME")
     langfuse_prompt_label: str = Field(default="production", alias="LANGFUSE_PROMPT_LABEL")
+    langfuse_prompt_cache_seconds: int = Field(default=300, alias="LANGFUSE_PROMPT_CACHE_SECONDS")
 
     incident_window_minutes: int = Field(default=15, alias="INCIDENT_WINDOW_MINUTES")
     incident_threshold: int = Field(default=5, alias="INCIDENT_THRESHOLD")
@@ -113,6 +118,41 @@ class Settings(BaseSettings):
             raise ValueError("LLM_FEW_SHOT_LIMIT must be >= 1")
         if value > 64:
             raise ValueError("LLM_FEW_SHOT_LIMIT must be <= 64")
+        return value
+
+    @field_validator("llm_category_max_tokens")
+    @classmethod
+    def validate_category_max_tokens(cls, value: int) -> int:
+        if value < 32:
+            raise ValueError("LLM_CATEGORY_MAX_TOKENS must be >= 32")
+        return value
+
+    @field_validator("llm_category_timeout_seconds")
+    @classmethod
+    def validate_category_timeout(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("LLM_CATEGORY_TIMEOUT_SECONDS must be > 0")
+        return value
+
+    @field_validator("llm_report_max_tokens")
+    @classmethod
+    def validate_report_max_tokens(cls, value: int) -> int:
+        if value < 64:
+            raise ValueError("LLM_REPORT_MAX_TOKENS must be >= 64")
+        return value
+
+    @field_validator("llm_report_timeout_seconds")
+    @classmethod
+    def validate_report_timeout(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("LLM_REPORT_TIMEOUT_SECONDS must be > 0")
+        return value
+
+    @field_validator("langfuse_prompt_cache_seconds")
+    @classmethod
+    def validate_prompt_cache_seconds(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("LANGFUSE_PROMPT_CACHE_SECONDS must be >= 0")
         return value
 
     @field_validator("speech_timeout_seconds")

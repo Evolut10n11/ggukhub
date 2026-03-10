@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -33,3 +34,13 @@ class ParsedBitrixEvent(BaseModel):
     bitrix_id: str | None = None
     status: str | None = None
     message: str | None = None
+
+
+class ReportLookupResult(BaseModel):
+    report_id: int
+    created_at: datetime
+    status: str | None = None
+    category: str
+    address: str
+    jk: str | None = None
+    bitrix_id: str | None = None

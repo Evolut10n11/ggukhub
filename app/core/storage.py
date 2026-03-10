@@ -4,10 +4,12 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Select, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.enums import IncidentStatus, is_active_report_status
 from app.core.models import BitrixEvent, Incident, IncidentEvent, Report, ReportAuditLog, SessionState, User
-from app.core.schemas import ReportAuditCreate, ReportCreate, SessionPayload
+from app.core.schemas import ReportAuditCreate, ReportCreate, ReportLookupResult, SessionPayload
 from app.core.utils import dump_json
 
 
@@ -137,6 +139,31 @@ class Storage:
             await session.refresh(report)
             return report
 
+    async def get_latest_report_summary(self, user_id: int) -> ReportLookupResult | None:
+        async with self._session_factory() as session:
+            stmt: Select[tuple[Report]] = (
+                select(Report)
+                .where(Report.user_id == user_id)
+                .order_by(Report.created_at.desc(), Report.id.desc())
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            report = result.scalar_one_or_none()
+            return self._to_report_lookup_result(report)
+
+    async def get_latest_active_report_summary(self, user_id: int) -> ReportLookupResult | None:
+        async with self._session_factory() as session:
+            stmt: Select[tuple[Report]] = (
+                select(Report)
+                .where(Report.user_id == user_id)
+                .order_by(Report.created_at.desc(), Report.id.desc())
+            )
+            result = await session.execute(stmt)
+            for report in result.scalars():
+                if is_active_report_status(report.status):
+                    return self._to_report_lookup_result(report)
+            return None
+
     async def get_recent_report_timestamps(self, scope_key: str, since: datetime) -> list[datetime]:
         async with self._session_factory() as session:
             stmt = select(Report.created_at).where(Report.scope_key == scope_key).where(Report.created_at >= since)
@@ -148,7 +175,7 @@ class Storage:
             stmt: Select[tuple[Incident]] = (
                 select(Incident)
                 .where(Incident.scope_key == scope_key)
-                .where(Incident.status == "active")
+                .where(Incident.status == IncidentStatus.ACTIVE.value)
                 .order_by(Incident.started_at.desc())
             )
             result = await session.execute(stmt)
@@ -156,7 +183,12 @@ class Storage:
 
     async def create_incident(self, scope_key: str, category: str, public_message: str) -> Incident:
         async with self._session_factory() as session:
-            incident = Incident(scope_key=scope_key, category=category, status="active", public_message=public_message)
+            incident = Incident(
+                scope_key=scope_key,
+                category=category,
+                status=IncidentStatus.ACTIVE.value,
+                public_message=public_message,
+            )
             session.add(incident)
             await session.commit()
             await session.refresh(incident)
@@ -171,7 +203,10 @@ class Storage:
                 return
             link = IncidentEvent(incident_id=incident_id, report_id=report_id)
             session.add(link)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
 
     async def create_bitrix_event(
         self,
@@ -196,3 +231,17 @@ class Storage:
             await session.commit()
             await session.refresh(event)
             return event
+
+    @staticmethod
+    def _to_report_lookup_result(report: Report | None) -> ReportLookupResult | None:
+        if report is None:
+            return None
+        return ReportLookupResult(
+            report_id=report.id,
+            created_at=report.created_at,
+            status=report.status,
+            category=report.category,
+            address=report.address,
+            jk=report.jk,
+            bitrix_id=report.bitrix_id,
+        )

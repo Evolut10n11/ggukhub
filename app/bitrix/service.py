@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.bitrix.client import BitrixApiClient
+from app.bitrix.formatters import build_ticket_description, build_ticket_title
 from app.bitrix.models import (
     BitrixCommentPayloadInput,
     BitrixStatusUpdatePayloadInput,
@@ -34,15 +35,8 @@ class BitrixTicketService:
         payload_input = BitrixTicketPayloadInput(
             local_report_id=report.id,
             telegram_id=user.telegram_id,
-            title=f"Заявка УК #{report.id}",
-            description=(
-                f"{report.text}\n\n"
-                f"Категория: {report.category}\n"
-                f"ЖК: {report.jk or 'не указан'}\n"
-                f"Адрес: {report.address}\n"
-                f"Квартира: {report.apt}\n"
-                f"Телефон: {report.phone}"
-            ),
+            title=build_ticket_title(report),
+            description=build_ticket_description(report),
             jk=report.jk,
             address=report.address,
             category=report.category,

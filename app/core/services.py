@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from app.bitrix.client import BitrixApiClient
 from app.bitrix.service import BitrixTicketService, BitrixWebhookService
 from app.config import Settings
+from app.core.category_resolution import CategoryResolver
 from app.core.classifier import CategoryClassifier
-from app.core.llm_category import LLMCategoryResolver
 from app.core.storage import Storage
 from app.core.tariffs import TariffDirectory
 from app.incidents.service import IncidentService
@@ -21,7 +21,7 @@ class AppServices:
     settings: Settings
     storage: Storage
     classifier: CategoryClassifier
-    llm_category: LLMCategoryResolver
+    llm_category: CategoryResolver
     incidents: IncidentService
     responder: BaseResponder
     speech: SpeechToTextClient

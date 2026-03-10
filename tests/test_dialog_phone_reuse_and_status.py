@@ -317,6 +317,39 @@ async def test_abusive_problem_text_is_rejected_on_problem_step(tmp_path: Path) 
 
 
 @pytest.mark.asyncio
+async def test_offtopic_problem_text_is_rejected_from_idle(tmp_path: Path) -> None:
+    services, engine = await _build_services(tmp_path / "problem_offtopic_idle.db")
+    try:
+        replies = await _send_user_text(services, 410_011, "Включите музыку крутую")
+        assert any("только с заявками по дому" in text for text in replies)
+
+        user = await services.storage.get_user_by_telegram_id(410_011)
+        assert user is not None
+        snapshot = await services.storage.get_session(user.id)
+        assert snapshot.step == "idle"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_offtopic_problem_text_is_rejected_on_problem_step(tmp_path: Path) -> None:
+    services, engine = await _build_services(tmp_path / "problem_offtopic_step.db")
+    try:
+        for text in ("привет", "ЖК Pride Park", "1", "1", "1", "+79990001122"):
+            await _send_user_text(services, 410_012, text)
+
+        replies = await _send_user_text(services, 410_012, "Включите музыку крутую")
+        assert any("только с заявками по дому" in text for text in replies)
+
+        user = await services.storage.get_user_by_telegram_id(410_012)
+        assert user is not None
+        snapshot = await services.storage.get_session(user.id)
+        assert snapshot.step == "awaiting_problem"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_status_request_uses_latest_active_report_and_keeps_draft(tmp_path: Path) -> None:
     services, engine = await _build_services(tmp_path / "status_active_lookup.db")
     try:

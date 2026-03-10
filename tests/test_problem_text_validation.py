@@ -25,3 +25,10 @@ def test_validate_problem_text_rejects_abusive_input() -> None:
     assert not result.is_valid
     assert result.issue == ProblemTextIssue.ABUSIVE
     assert "без оскорблений" in problem_text_rejection_message(result)
+
+
+def test_validate_problem_text_rejects_offtopic_request() -> None:
+    result = validate_problem_text("Включите музыку крутую")
+    assert not result.is_valid
+    assert result.issue == ProblemTextIssue.OFF_TOPIC
+    assert "только с заявками по дому" in problem_text_rejection_message(result)

@@ -9,6 +9,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.test import TestModel
 from pydantic_ai_langfuse_extras.model import AgentConfig, openai_model_from_config
 
+from app.core.category_resolution import CategoryResolutionResult, CategoryResolutionSource
 from app.config import Settings
 from app.core.classifier import CategoryClassifier
 
@@ -84,13 +85,13 @@ class LLMCategoryResolver:
     def enabled(self) -> bool:
         return bool(self._settings.use_llm and self._settings.llm_base_url and self._settings.llm_model)
 
-    async def resolve(self, text: str) -> str | None:
+    async def resolve(self, text: str) -> CategoryResolutionResult:
         if not self.enabled:
-            return None
+            return self._fallback_result(reason="disabled")
 
         source = text.strip()
         if not source:
-            return None
+            return self._fallback_result(reason="empty_input")
 
         try:
             latin_source = _transliterate_ru(source)
@@ -111,16 +112,21 @@ class LLMCategoryResolver:
                 "LLM category resolve timed out after %.2fs",
                 self._settings.llm_category_timeout_seconds,
             )
-            return None
+            return self._fallback_result(reason="timeout", timed_out=True)
         except Exception as error:
             logger.warning("LLM category resolve failed: %s", error)
-            return None
+            return self._fallback_result(reason=type(error).__name__)
 
         content = str(result.output).strip()
         category = self._parse_category(content)
         if category is None:
             logger.warning("Cannot parse category from LLM response: %r", content)
-        return category
+            return self._fallback_result(reason="parse_failed", raw_output=content)
+        return CategoryResolutionResult(
+            category=category,
+            source=CategoryResolutionSource.LLM,
+            raw_output=content,
+        )
 
     def _build_instructions(self) -> str:
         categories_help = {
@@ -176,3 +182,19 @@ class LLMCategoryResolver:
                 return self._lookup[token]
 
         return None
+
+    @staticmethod
+    def _fallback_result(
+        *,
+        reason: str,
+        raw_output: str | None = None,
+        timed_out: bool = False,
+    ) -> CategoryResolutionResult:
+        return CategoryResolutionResult(
+            category=None,
+            source=CategoryResolutionSource.LLM,
+            raw_output=raw_output,
+            timed_out=timed_out,
+            fallback_used=True,
+            metadata={"reason": reason},
+        )

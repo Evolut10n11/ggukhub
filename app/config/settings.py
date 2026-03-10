@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     llm_category_timeout_seconds: float = Field(default=2.0, alias="LLM_CATEGORY_TIMEOUT_SECONDS")
     llm_report_max_tokens: int = Field(default=256, alias="LLM_REPORT_MAX_TOKENS")
     llm_report_timeout_seconds: float = Field(default=2.5, alias="LLM_REPORT_TIMEOUT_SECONDS")
+    llm_report_failure_cooldown_seconds: float = Field(default=30.0, alias="LLM_REPORT_FAILURE_COOLDOWN_SECONDS")
     speech_enabled: bool = Field(default=False, alias="SPEECH_ENABLED")
     speech_base_url: str = Field(default="http://192.168.130.159:8080/v1", alias="SPEECH_BASE_URL")
     speech_api_key: str | None = Field(default=None, alias="SPEECH_API_KEY")
@@ -146,6 +147,13 @@ class Settings(BaseSettings):
     def validate_report_timeout(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("LLM_REPORT_TIMEOUT_SECONDS must be > 0")
+        return value
+
+    @field_validator("llm_report_failure_cooldown_seconds")
+    @classmethod
+    def validate_report_failure_cooldown(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("LLM_REPORT_FAILURE_COOLDOWN_SECONDS must be >= 0")
         return value
 
     @field_validator("langfuse_prompt_cache_seconds")

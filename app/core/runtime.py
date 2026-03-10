@@ -19,6 +19,7 @@ class AppRuntime:
 
     async def close(self) -> None:
         await self.services.notifier.close()
+        await self.services.bitrix_client.close()
         await self.db.close()
 
 

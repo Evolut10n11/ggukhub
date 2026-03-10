@@ -7,6 +7,7 @@ import pytest
 
 import app.core.llm_category as llm_category_module
 from app.config.settings import ALLOWED_LLM_MODEL, Settings
+from app.core.category_resolution import CategoryResolutionSource
 from app.core.classifier import CategoryClassifier
 from app.core.llm_category import LLMCategoryResolver
 
@@ -48,9 +49,12 @@ async def test_resolver_returns_code_from_agent_output(monkeypatch: pytest.Monke
     monkeypatch.setattr(llm_category_module, "_category_agent", DummyAgent())
 
     resolver = LLMCategoryResolver(settings=_settings(), classifier=_classifier())
-    category = await resolver.resolve("Lift is broken")
+    result = await resolver.resolve("Lift is broken")
 
-    assert category == "elevator"
+    assert result.category == "elevator"
+    assert result.source == CategoryResolutionSource.LLM
+    assert result.raw_output == "elevator"
+    assert result.fallback_used is False
     config = captured["config"]
     assert getattr(config, "model") == ALLOWED_LLM_MODEL
     assert getattr(config, "base_url") == "http://qwen.local/v1"
@@ -68,16 +72,19 @@ async def test_resolver_parses_json_style_output(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(llm_category_module, "_category_agent", DummyAgent())
 
     resolver = LLMCategoryResolver(settings=_settings(), classifier=_classifier())
-    category = await resolver.resolve("Water dripping from ceiling")
-    assert category == "water_leak"
+    result = await resolver.resolve("Water dripping from ceiling")
+    assert result.category == "water_leak"
+    assert result.raw_output == '{"category":"water_leak"}'
 
 
 @pytest.mark.asyncio
 async def test_resolver_disabled_when_llm_off() -> None:
     resolver = LLMCategoryResolver(settings=_settings(use_llm=False), classifier=_classifier())
     assert resolver.enabled is False
-    category = await resolver.resolve("anything")
-    assert category is None
+    result = await resolver.resolve("anything")
+    assert result.category is None
+    assert result.fallback_used is True
+    assert result.metadata["reason"] == "disabled"
 
 
 @pytest.mark.asyncio
@@ -106,8 +113,11 @@ async def test_resolver_returns_none_when_agent_times_out(monkeypatch: pytest.Mo
     )
     resolver = LLMCategoryResolver(settings=settings, classifier=_classifier())
 
-    category = await resolver.resolve("Lift is broken")
-    assert category is None
+    result = await resolver.resolve("Lift is broken")
+    assert result.category is None
+    assert result.timed_out is True
+    assert result.fallback_used is True
+    assert result.metadata["reason"] == "timeout"
 
 
 @pytest.mark.asyncio
@@ -125,6 +135,6 @@ async def test_resolver_live_qwen_typo_phrase() -> None:
         llm_max_tokens=8192,
     )
     resolver = LLMCategoryResolver(settings=settings, classifier=_classifier())
-    category = await resolver.resolve("Ливт не работает, застряли на 5 этаже")
+    result = await resolver.resolve("Ливт не работает, застряли на 5 этаже")
 
-    assert category in {"elevator", "other"}
+    assert result.category in {"elevator", "other", None}

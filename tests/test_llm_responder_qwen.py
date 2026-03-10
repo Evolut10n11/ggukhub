@@ -10,6 +10,20 @@ from app.config.settings import ALLOWED_LLM_MODEL, Settings
 from app.responders.llm_responder import LLMResponder
 
 
+class _DummyObservation:
+    def __init__(self) -> None:
+        self.updates: list[dict[str, object]] = []
+
+    def __enter__(self) -> "_DummyObservation":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    def update(self, **kwargs: object) -> None:
+        self.updates.append(kwargs)
+
+
 @pytest.mark.asyncio
 async def test_qwen_responder_uses_qwen_config_and_returns_llm_output(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
@@ -110,6 +124,88 @@ async def test_qwen_responder_falls_back_to_rules_when_agent_times_out(monkeypat
 
     output = await responder.report_created(local_id=78, bitrix_id=None)
     assert "78" in output
+
+
+@pytest.mark.asyncio
+async def test_qwen_responder_short_circuits_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def fake_openai_model_from_config(_: object) -> object:
+        return object()
+
+    class SlowAgent:
+        async def run(self, **_: object) -> SimpleNamespace:
+            nonlocal calls
+            calls += 1
+            import asyncio
+
+            await asyncio.sleep(0.05)
+            return SimpleNamespace(output="late output")
+
+    monkeypatch.setattr(llm_module, "openai_model_from_config", fake_openai_model_from_config)
+    monkeypatch.setattr(llm_module, "_writer_agent", SlowAgent())
+
+    settings = Settings(
+        telegram_bot_token="x",
+        use_llm=True,
+        llm_model=ALLOWED_LLM_MODEL,
+        llm_base_url="http://127.0.0.1:8080/v1",
+        llm_report_timeout_seconds=0.01,
+        llm_report_failure_cooldown_seconds=60.0,
+        langfuse_host=None,
+        langfuse_public_key=None,
+        langfuse_secret_key=None,
+    )
+    responder = LLMResponder(settings)
+
+    first_output = await responder.report_created(local_id=78, bitrix_id=None)
+    second_output = await responder.report_created(local_id=79, bitrix_id=None)
+
+    assert "78" in first_output
+    assert "79" in second_output
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_qwen_responder_preserves_timeout_status_in_langfuse_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_openai_model_from_config(_: object) -> object:
+        return object()
+
+    class SlowAgent:
+        async def run(self, **_: object) -> SimpleNamespace:
+            import asyncio
+
+            await asyncio.sleep(0.05)
+            return SimpleNamespace(output="late output")
+
+    monkeypatch.setattr(llm_module, "openai_model_from_config", fake_openai_model_from_config)
+    monkeypatch.setattr(llm_module, "_writer_agent", SlowAgent())
+
+    settings = Settings(
+        telegram_bot_token="x",
+        use_llm=True,
+        llm_model=ALLOWED_LLM_MODEL,
+        llm_base_url="http://127.0.0.1:8080/v1",
+        llm_report_timeout_seconds=0.01,
+        langfuse_host=None,
+        langfuse_public_key=None,
+        langfuse_secret_key=None,
+    )
+    responder = LLMResponder(settings)
+    observation = _DummyObservation()
+    monkeypatch.setattr(responder, "_start_flow_observation", lambda **_: observation)
+
+    output = await responder.report_created(local_id=80, bitrix_id=None)
+
+    assert "80" in output
+    assert observation.updates
+    last_update = observation.updates[-1]
+    assert last_update["status_message"] == "writer_timeout_rule_fallback"
+    assert "llm_unavailable_rule_fallback" not in {
+        update.get("status_message") for update in observation.updates
+    }
 
 
 @pytest.mark.asyncio

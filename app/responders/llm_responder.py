@@ -24,6 +24,7 @@ from pydantic_ai_langfuse_extras.prompt import convert_to_pydantic_messages
 
 from app.config import Settings
 from app.responders.base import BaseResponder
+from app.responders.models import GeneratedResponse, ResponseGeneratorSource
 from app.responders.rule_responder import RuleResponder
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,8 @@ class LLMResponder(BaseResponder):
         self._cached_prompt_model_key: int | None = None
         self._cached_prompt_model: Any | None = None
         self._default_writer_model: Any | None = None
+        self._writer_cooldown_until = 0.0
+        self._writer_cooldown_reason: str | None = None
 
         if settings.langfuse_enabled:
             try:
@@ -210,6 +213,27 @@ class LLMResponder(BaseResponder):
                 logger.warning("Failed to attach Langfuse prompt attributes: %s", error)
         return model
 
+    def _writer_cooldown_active(self) -> bool:
+        return time.monotonic() < self._writer_cooldown_until
+
+    def _start_writer_cooldown(self, reason: str) -> None:
+        cooldown_seconds = self._settings.llm_report_failure_cooldown_seconds
+        if cooldown_seconds <= 0:
+            return
+        self._writer_cooldown_until = time.monotonic() + cooldown_seconds
+        self._writer_cooldown_reason = reason
+
+    def _writer_cooldown_metadata(self) -> dict[str, Any]:
+        remaining_seconds = max(0.0, self._writer_cooldown_until - time.monotonic())
+        metadata: dict[str, Any] = {
+            "mode": "rule_fallback",
+            "fallback_source": "writer_cooldown",
+            "cooldown_remaining_seconds": round(remaining_seconds, 2),
+        }
+        if self._writer_cooldown_reason:
+            metadata["fallback_reason"] = self._writer_cooldown_reason
+        return metadata
+
     def _start_flow_observation(self, *, summary_input: str, local_id: int, bitrix_id: str | None):
         if not self._langfuse:
             return nullcontext(None)
@@ -311,26 +335,49 @@ class LLMResponder(BaseResponder):
                     chain_obs.update(output=output)
                     return output
 
-    async def report_created(self, local_id: int, bitrix_id: str | None) -> str:
+    async def build_report_created(self, local_id: int, bitrix_id: str | None) -> GeneratedResponse:
         if not self._settings.use_llm:
-            return await self._fallback.report_created(local_id, bitrix_id)
+            return await self._fallback.build_report_created(local_id, bitrix_id)
 
-        instructions, prompt = self._load_prompt_instructions()
-        few_shot_history = self._few_shot_history
-        user_prompt = self._build_report_prompt(local_id, bitrix_id)
         summary_input = self._build_summary_input(local_id, bitrix_id)
-        writer_model = self._resolve_writer_model(prompt)
-        writer_deps = _WriterDeps(
-            instructions=instructions,
-            few_shot_history=few_shot_history,
-            writer_model=writer_model,
-        )
 
         with self._start_flow_observation(
             summary_input=summary_input,
             local_id=local_id,
             bitrix_id=bitrix_id,
         ) as flow_obs:
+            if self._writer_cooldown_active():
+                fallback = await self._fallback.build_report_created(local_id, bitrix_id)
+                if flow_obs is not None:
+                    flow_obs.update(
+                        output=fallback.text,
+                        level="WARNING",
+                        status_message="writer_short_circuit_rule_fallback",
+                        metadata=self._writer_cooldown_metadata(),
+                    )
+                return GeneratedResponse(
+                    text=fallback.text,
+                    source=ResponseGeneratorSource.RULES,
+                    fallback_used=True,
+                    metadata=self._writer_cooldown_metadata(),
+                )
+
+            instructions, prompt = self._load_prompt_instructions()
+            few_shot_history = self._few_shot_history
+            user_prompt = self._build_report_prompt(local_id, bitrix_id)
+            writer_model = self._resolve_writer_model(prompt)
+            writer_deps = _WriterDeps(
+                instructions=instructions,
+                few_shot_history=few_shot_history,
+                writer_model=writer_model,
+            )
+
+            fallback_status_message = "writer_empty_output_rule_fallback"
+            fallback_metadata: dict[str, Any] = {
+                "mode": "rule_fallback",
+                "fallback_source": "writer_pipeline",
+                "fallback_reason": "empty_output",
+            }
             try:
                 output = await asyncio.wait_for(
                     self._run_writer_pipeline(
@@ -345,24 +392,45 @@ class LLMResponder(BaseResponder):
                 if output:
                     if flow_obs is not None:
                         flow_obs.update(output=output, metadata={"mode": "writer_pipeline"})
-                    return output
+                    return GeneratedResponse(
+                        text=output,
+                        source=ResponseGeneratorSource.LLM,
+                        fallback_used=False,
+                        metadata={"mode": "writer_pipeline"},
+                    )
             except asyncio.TimeoutError:
                 logger.warning("Writer pipeline timed out after %.2fs, fallback to rules", self._settings.llm_report_timeout_seconds)
-                if flow_obs is not None:
-                    flow_obs.update(level="WARNING", status_message="writer_timeout_rule_fallback")
+                fallback_status_message = "writer_timeout_rule_fallback"
+                fallback_metadata = {
+                    "mode": "rule_fallback",
+                    "fallback_source": "writer_pipeline",
+                    "fallback_reason": "timeout",
+                }
+                self._start_writer_cooldown("timeout")
             except Exception as error:
                 logger.warning("Writer pipeline failed, fallback to rules: %s", error)
-                if flow_obs is not None:
-                    flow_obs.update(level="WARNING", status_message=f"writer_failed: {type(error).__name__}")
+                fallback_status_message = f"writer_failed_rule_fallback:{type(error).__name__}"
+                fallback_metadata = {
+                    "mode": "rule_fallback",
+                    "fallback_source": "writer_pipeline",
+                    "fallback_reason": type(error).__name__,
+                }
+                self._start_writer_cooldown(type(error).__name__)
 
-            fallback_output = await self._fallback.report_created(local_id, bitrix_id)
+            fallback = await self._fallback.build_report_created(local_id, bitrix_id)
             if flow_obs is not None:
                 flow_obs.update(
-                    output=fallback_output,
+                    output=fallback.text,
                     level="WARNING",
-                    status_message="llm_unavailable_rule_fallback",
+                    status_message=fallback_status_message,
+                    metadata=fallback_metadata,
                 )
-            return fallback_output
+            return GeneratedResponse(
+                text=fallback.text,
+                source=ResponseGeneratorSource.RULES,
+                fallback_used=True,
+                metadata=fallback_metadata,
+            )
 
     def _resolve_writer_model(self, prompt: Any | None) -> Any:
         if prompt is None:

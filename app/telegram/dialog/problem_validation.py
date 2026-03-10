@@ -42,6 +42,28 @@ _LOW_SIGNAL_TOKENS = frozenset(
         "помогите",
     }
 )
+_OFFTOPIC_PATTERNS = (
+    "включи музыку",
+    "включите музыку",
+    "поставь музыку",
+    "поставьте музыку",
+    "включи песню",
+    "включите песню",
+    "поставь песню",
+    "поставьте песню",
+    "включи радио",
+    "включите радио",
+    "спой",
+    "спойте",
+    "расскажи анекдот",
+    "расскажите анекдот",
+    "расскажи шутку",
+    "расскажите шутку",
+    "пошути",
+    "поговори со мной",
+    "как дела",
+    "что делаешь",
+)
 
 
 class ProblemTextIssue(str, Enum):
@@ -49,6 +71,7 @@ class ProblemTextIssue(str, Enum):
     TOO_SHORT = "too_short"
     LOW_SIGNAL = "low_signal"
     ABUSIVE = "abusive"
+    OFF_TOPIC = "off_topic"
 
 
 @dataclass(slots=True)
@@ -65,6 +88,9 @@ def validate_problem_text(text: str) -> ProblemTextValidationResult:
 
     if _PROFANITY_RE.search(normalized):
         return ProblemTextValidationResult(is_valid=False, issue=ProblemTextIssue.ABUSIVE, normalized_text=normalized)
+
+    if any(pattern in normalized for pattern in _OFFTOPIC_PATTERNS):
+        return ProblemTextValidationResult(is_valid=False, issue=ProblemTextIssue.OFF_TOPIC, normalized_text=normalized)
 
     tokens = _WORD_RE.findall(normalized)
     letter_count = sum(1 for symbol in normalized if _LETTER_RE.fullmatch(symbol))
@@ -101,6 +127,11 @@ def problem_text_rejection_message(result: ProblemTextValidationResult) -> str:
         return (
             "Опишите, пожалуйста, проблему без оскорблений: что произошло и где это случилось. "
             "Например: «не работает лифт в подъезде 1»."
+        )
+    if result.issue == ProblemTextIssue.OFF_TOPIC:
+        return (
+            "Я помогаю только с заявками по дому: аварии, уборка, домофон, лифт, вода, электричество и похожие проблемы. "
+            "Опишите, пожалуйста, именно проблему по дому."
         )
     return (
         "Нужно коротко и по делу описать саму проблему: что случилось и где. "

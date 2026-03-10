@@ -41,12 +41,14 @@ def test_llm_report_tuning_defaults_and_validation() -> None:
         llm_category_timeout_seconds=2.0,
         llm_report_max_tokens=256,
         llm_report_timeout_seconds=2.5,
+        llm_report_failure_cooldown_seconds=30.0,
         langfuse_prompt_cache_seconds=300,
     )
     assert settings.llm_category_max_tokens == 96
     assert settings.llm_category_timeout_seconds == 2.0
     assert settings.llm_report_max_tokens == 256
     assert settings.llm_report_timeout_seconds == 2.5
+    assert settings.llm_report_failure_cooldown_seconds == 30.0
     assert settings.langfuse_prompt_cache_seconds == 300
 
     with pytest.raises(ValidationError):
@@ -60,3 +62,6 @@ def test_llm_report_tuning_defaults_and_validation() -> None:
 
     with pytest.raises(ValidationError):
         _ = Settings(telegram_bot_token="x", use_llm=False, llm_report_timeout_seconds=0)
+
+    with pytest.raises(ValidationError):
+        _ = Settings(telegram_bot_token="x", use_llm=False, llm_report_failure_cooldown_seconds=-1)

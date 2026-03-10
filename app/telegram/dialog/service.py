@@ -3,22 +3,29 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from app.bitrix.client import BitrixClientError
 from app.core.enums import BitrixSyncStatus, ReportAuditStage
 from app.core.models import Report, User
 from app.core.regulation import REGULATION_VERSION, build_bitrix_audit_payload, build_report_composition_payload
 from app.core.schemas import ReportAuditCreate, ReportCreate, ReportLookupResult, SessionPayload
 from app.core.utils import build_address, compose_scope_key, normalize_phone, normalize_text
 from app.telegram.constants import CATEGORY_LABELS, UNKNOWN_JK_VALUE, WELCOME_TEXT
+from app.telegram.dialog.classification import DialogCategoryService
+from app.telegram.dialog.finalization import DialogReportFinalizer
+from app.telegram.dialog.formatters import (
+    ReportReviewView,
+    build_report_review,
+    build_resume_prompt,
+    build_saved_phone_prompt,
+)
 from app.telegram.dialog.models import (
     ClassificationResult,
-    ClassificationSource,
     DialogSessionData,
     DialogSnapshot,
     DialogStep,
     DialogTransport,
     FinalizedReportDraft,
 )
+from app.telegram.dialog.status_service import DialogReportLookupService
 from app.telegram.dialog.problem_validation import problem_text_rejection_message, validate_problem_text
 from app.telegram.dialog.state_machine import (
     category_from_text,
@@ -54,6 +61,16 @@ class DialogService:
     def __init__(self, services: AppServices):
         self._services = services
         self._runtime = services.dialog_runtime
+        self._category_service = DialogCategoryService(services.classifier, services.llm_category)
+        self._report_lookup_service = DialogReportLookupService(services.storage, services.classifier.label)
+        self._report_finalizer = DialogReportFinalizer(
+            storage=services.storage,
+            incidents=services.incidents,
+            responder=services.responder,
+            bitrix_service=services.bitrix_service,
+            notifier=services.notifier,
+            label_resolver=services.classifier.label,
+        )
 
     async def start(self, transport: DialogTransport, *, include_welcome: bool) -> None:
         user = await self._upsert_user(transport.telegram_id, transport.display_name)
@@ -794,16 +811,15 @@ class DialogService:
         user: User,
         snapshot: DialogSnapshot,
     ) -> None:
-        report = await self._services.storage.get_latest_active_report_summary(user.id)
-        if report is None:
-            report = await self._services.storage.get_latest_report_summary(user.id)
+        report = await self._report_lookup_service.get_latest_relevant_report(user.id)
+        reply = self._report_lookup_service.build_reply(report)
 
-        if report is None:
+        if False and report is None:
             reply = "Ранее зарегистрированных заявок не нашла."
         else:
-            reply = self._build_report_lookup_reply(report)
+            reply = reply
 
-        resume_prompt = self._build_resume_prompt(snapshot.step)
+        resume_prompt = build_resume_prompt(snapshot.step)
         if resume_prompt:
             reply = f"{reply}\n\n{resume_prompt}"
 
@@ -822,15 +838,7 @@ class DialogService:
         )
 
     async def _classify_problem(self, problem_text: str) -> ClassificationResult:
-        auto_category = self._services.classifier.classify(problem_text)
-        if auto_category != "other":
-            return ClassificationResult(category=auto_category, source=ClassificationSource.RULES)
-
-        llm_category = await self._services.llm_category.resolve(problem_text)
-        if llm_category is not None:
-            return ClassificationResult(category=llm_category, source=ClassificationSource.LLM)
-
-        return ClassificationResult(category=auto_category, source=ClassificationSource.RULES)
+        return await self._category_service.classify(problem_text)
 
     async def _finalize_report(
         self,
@@ -838,6 +846,18 @@ class DialogService:
         user: User,
         data: DialogSessionData,
     ) -> None:
+        result = await self._report_finalizer.finalize_report(user=user, data=data)
+        await transport.send_text(result.reply_text, None)
+        if self._services.bitrix_service.enabled:
+            self._runtime.register_background_task(
+                self._report_finalizer.sync_bitrix_ticket(
+                    report=result.report,
+                    user=user,
+                    is_mass_incident=result.is_mass_incident,
+                )
+            )
+        return
+
         draft = self._build_finalized_report_draft(data, user)
         report = await self._services.storage.create_report(
             ReportCreate(
@@ -916,6 +936,13 @@ class DialogService:
         user: User,
         is_mass_incident: bool,
     ) -> None:
+        await self._report_finalizer.sync_bitrix_ticket(
+            report=report,
+            user=user,
+            is_mass_incident=is_mass_incident,
+        )
+        return
+
         try:
             bitrix_id = await self._services.bitrix_service.create_ticket(report=report, user=user)
             await self._services.storage.set_report_bitrix_id(report.id, bitrix_id)
@@ -1004,6 +1031,19 @@ class DialogService:
 
     def _build_report_review(self, data: DialogSessionData) -> str:
         category = str(data.category or data.auto_category or "other")
+        return build_report_review(
+            ReportReviewView(
+                category_label=self._services.classifier.label(category),
+                jk=data.jk,
+                house=data.house,
+                entrance=data.entrance,
+                apartment=data.apartment,
+                phone=data.phone,
+                problem_text=data.problem_text,
+            )
+        )
+
+        category = str(data.category or data.auto_category or "other")
         return "\n".join(
             [
                 "Проверьте, пожалуйста, заявку перед отправкой:",
@@ -1021,6 +1061,8 @@ class DialogService:
         )
 
     def _build_saved_phone_prompt(self, phone: str | None) -> str:
+        return build_saved_phone_prompt(phone)
+
         saved_phone = str(phone or "").strip()
         if not saved_phone:
             return "Не нашла сохраненный номер. Укажите телефон для связи в формате +7XXXXXXXXXX."
@@ -1046,6 +1088,8 @@ class DialogService:
         return "\n".join(lines)
 
     def _build_resume_prompt(self, step: DialogStep) -> str | None:
+        return build_resume_prompt(step)
+
         prompts = {
             DialogStep.AWAITING_JK: "Черновик новой заявки сохранила. Чтобы продолжить, выберите ЖК.",
             DialogStep.AWAITING_HOUSE: "Черновик новой заявки сохранила. Чтобы продолжить, напишите дом.",

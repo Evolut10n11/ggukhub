@@ -56,6 +56,10 @@ class DialogSnapshot:
 class ClassificationResult:
     category: str
     source: ClassificationSource
+    raw_output: str | None = None
+    timed_out: bool = False
+    fallback_used: bool = False
+    metadata: dict[str, Any] | None = None
 
 
 SendTextCallable = Callable[[str, Any | None], Awaitable[None]]

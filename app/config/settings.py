@@ -21,7 +21,10 @@ class Settings(BaseSettings):
 
     app_name: str = Field(default="Green Garden UK Assistant", alias="APP_NAME")
     base_url: str = Field(default="http://localhost:8000", alias="BASE_URL")
-    database_url: str = Field(default="sqlite:///./app.db", alias="DATABASE_URL")
+    database_url: str = Field(default="sqlite:///./var/app.db", alias="DATABASE_URL")
+    api_host: str = Field(default="0.0.0.0", alias="API_HOST")
+    api_port: int = Field(default=8000, alias="API_PORT")
+    api_log_level: str = Field(default="info", alias="API_LOG_LEVEL")
 
     telegram_bot_token: str = Field(
         default="",
@@ -53,7 +56,7 @@ class Settings(BaseSettings):
     bitrix_field_status: str = Field(default="STATUS_ID", alias="BITRIX_FIELD_STATUS")
 
     use_llm: bool = Field(default=False, alias="USE_LLM")
-    llm_base_url: str = Field(default="http://192.168.130.159:8080/v1", alias="LLM_BASE_URL")
+    llm_base_url: str = Field(default="", alias="LLM_BASE_URL")
     llm_model: str = Field(default=ALLOWED_LLM_MODEL, alias="LLM_MODEL")
     llm_api_key: str | None = Field(default=None, alias="LLM_API_KEY")
     llm_max_tokens: int = Field(default=12288, alias="LLM_MAX_TOKENS")
@@ -69,7 +72,7 @@ class Settings(BaseSettings):
     report_confirmation_budget_ms: int = Field(default=3500, alias="REPORT_CONFIRMATION_BUDGET_MS")
     bitrix_timeout_seconds: float = Field(default=10.0, alias="BITRIX_TIMEOUT_SECONDS")
     speech_enabled: bool = Field(default=False, alias="SPEECH_ENABLED")
-    speech_base_url: str = Field(default="http://192.168.130.159:8080/v1", alias="SPEECH_BASE_URL")
+    speech_base_url: str = Field(default="", alias="SPEECH_BASE_URL")
     speech_api_key: str | None = Field(default=None, alias="SPEECH_API_KEY")
     speech_model: str = Field(default="whisper-1", alias="SPEECH_MODEL")
     speech_language: str = Field(default="ru", alias="SPEECH_LANGUAGE")

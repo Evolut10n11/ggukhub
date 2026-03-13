@@ -1,5 +1,5 @@
 param(
-    [string]$Root = "C:\Users\rodionov.ip\Desktop\git"
+    [string]$Root = (Join-Path $HOME "git")
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,4 +31,3 @@ foreach ($repo in $repos) {
 }
 
 Write-Host "Done."
-

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_responder(settings: Settings) -> BaseResponder:
-    if settings.use_llm and settings.llm_responder_enabled:
+    if settings.use_llm and settings.llm_responder_enabled and settings.llm_base_url and settings.llm_model:
         try:
             from app.responders.llm_responder import LLMResponder
 

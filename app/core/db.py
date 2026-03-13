@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
@@ -15,6 +16,24 @@ def build_engine_kwargs(database_url: str) -> dict[str, object]:
     return engine_kwargs
 
 
+def _sqlite_file_path(database_url: str) -> Path | None:
+    prefixes = ("sqlite+aiosqlite:///", "sqlite:///")
+    for prefix in prefixes:
+        if database_url.startswith(prefix):
+            raw_path = database_url.removeprefix(prefix).split("?", 1)[0].strip()
+            if not raw_path or raw_path == ":memory:":
+                return None
+            return Path(raw_path)
+    return None
+
+
+def ensure_database_parent_dir(database_url: str) -> None:
+    db_path = _sqlite_file_path(database_url)
+    if db_path is None:
+        return
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+
 @dataclass(slots=True)
 class DatabaseRuntime:
     settings: Settings
@@ -22,6 +41,7 @@ class DatabaseRuntime:
     session_factory: async_sessionmaker[AsyncSession] = field(init=False)
 
     def __post_init__(self) -> None:
+        ensure_database_parent_dir(self.settings.database_url)
         self.engine = create_async_engine(
             self.settings.database_url,
             **build_engine_kwargs(self.settings.database_url),

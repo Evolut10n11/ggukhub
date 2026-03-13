@@ -35,6 +35,7 @@ app.db
 *.sqlite3
 .bot.lock
 *.log
+var/
 
 # IDE / OS
 .idea/

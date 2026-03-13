@@ -12,31 +12,53 @@ from app.core.runtime import AppRuntime, create_app_runtime
 from app.telegram.bot import configure_bot_ui, create_bot, create_dispatcher
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    cfg = settings or get_settings()
+async def _bind_runtime(app: FastAPI, runtime: AppRuntime) -> None:
+    app.state.runtime = runtime
+    app.state.services = runtime.services
+    app.state.webhook_bot = None
+    app.state.webhook_dispatcher = None
+
+    if runtime.services.settings.telegram_use_webhook:
+        if not runtime.services.settings.telegram_bot_token:
+            raise RuntimeError("TELEGRAM_BOT_TOKEN is required for webhook mode")
+        app.state.webhook_bot = create_bot(runtime.services.settings.telegram_bot_token)
+        app.state.webhook_dispatcher = create_dispatcher(runtime.services)
+        await configure_bot_ui(app.state.webhook_bot)
+
+
+async def _release_runtime(app: FastAPI, runtime: AppRuntime, *, close_runtime: bool) -> None:
+    if app.state.webhook_bot is not None:
+        await app.state.webhook_bot.session.close()
+    if close_runtime:
+        await runtime.close()
+
+
+def create_app(
+    settings: Settings | None = None,
+    *,
+    runtime: AppRuntime | None = None,
+    manage_runtime: bool | None = None,
+) -> FastAPI:
+    if settings is not None:
+        cfg = settings
+    elif runtime is not None:
+        cfg = runtime.settings
+    else:
+        cfg = get_settings()
+    should_manage_runtime = runtime is None if manage_runtime is None else manage_runtime
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        runtime = create_app_runtime(cfg)
-        await runtime.init()
-        app.state.runtime = runtime
-        app.state.services = runtime.services
-        app.state.webhook_bot = None
-        app.state.webhook_dispatcher = None
-
-        if runtime.services.settings.telegram_use_webhook:
-            if not runtime.services.settings.telegram_bot_token:
-                raise RuntimeError("TELEGRAM_BOT_TOKEN is required for webhook mode")
-            app.state.webhook_bot = create_bot(runtime.services.settings.telegram_bot_token)
-            app.state.webhook_dispatcher = create_dispatcher(runtime.services)
-            await configure_bot_ui(app.state.webhook_bot)
+        active_runtime = runtime
+        if active_runtime is None:
+            active_runtime = create_app_runtime(cfg)
+            await active_runtime.init()
+        await _bind_runtime(app, active_runtime)
 
         try:
             yield
         finally:
-            if app.state.webhook_bot is not None:
-                await app.state.webhook_bot.session.close()
-            await runtime.close()
+            await _release_runtime(app, active_runtime, close_runtime=should_manage_runtime)
 
     app = FastAPI(title=cfg.app_name, lifespan=lifespan)
     _register_routes(app)

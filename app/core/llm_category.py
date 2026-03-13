@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import logging
+import os
 import re
 from contextlib import nullcontext
 from dataclasses import dataclass
+from typing import Any
 
-from langfuse import Langfuse
-from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.test import TestModel
-from pydantic_ai_langfuse_extras.model import AgentConfig, openai_model_from_config
+try:
+    from langfuse import Langfuse
+    from pydantic_ai import Agent, RunContext
+    from pydantic_ai.models.test import TestModel
+    from pydantic_ai_langfuse_extras.model import AgentConfig, openai_model_from_config
+    _LLM_DEPENDENCIES_ERROR: Exception | None = None
+except ImportError as error:
+    Langfuse = Any  # type: ignore[assignment]
+    RunContext = Any  # type: ignore[assignment]
+    Agent = None  # type: ignore[assignment]
+    TestModel = None  # type: ignore[assignment]
+    AgentConfig = None  # type: ignore[assignment]
+    openai_model_from_config = None  # type: ignore[assignment]
+    _LLM_DEPENDENCIES_ERROR = error
 
 from app.core.category_resolution import CategoryResolutionResult, CategoryResolutionSource
 from app.config import Settings
@@ -18,6 +29,14 @@ from app.core.classifier import CategoryClassifier
 from app.core.telemetry import start_flow_telemetry
 
 logger = logging.getLogger(__name__)
+
+
+def _llm_dependencies_available() -> bool:
+    return _LLM_DEPENDENCIES_ERROR is None
+
+
+def _missing_llm_dependencies_message() -> str:
+    return "LLM category dependencies are missing. Install: pip install -r requirements-llm.txt"
 
 _RU_TO_LATIN = {
     "а": "a",
@@ -68,7 +87,18 @@ class _Deps:
     instructions: str
 
 
-_category_agent = Agent(model=TestModel(), deps_type=_Deps, name="uk_category_agent")
+class _UnavailableCategoryAgent:
+    def instructions(self, fn: Any) -> Any:
+        return fn
+
+    async def run(self, **_: Any) -> Any:
+        raise RuntimeError(_missing_llm_dependencies_message()) from _LLM_DEPENDENCIES_ERROR
+
+
+if Agent is not None and TestModel is not None:
+    _category_agent = Agent(model=TestModel(), deps_type=_Deps, name="uk_category_agent")
+else:
+    _category_agent = _UnavailableCategoryAgent()
 
 
 @_category_agent.instructions
@@ -86,7 +116,10 @@ class LLMCategoryResolver:
         self._model: object | None = None
         self._langfuse: Langfuse | None = None
 
-        if settings.langfuse_enabled:
+        if settings.use_llm and not _llm_dependencies_available():
+            logger.info(_missing_llm_dependencies_message())
+
+        if settings.langfuse_enabled and _llm_dependencies_available():
             try:
                 os.environ["LANGFUSE_TRACING_ENVIRONMENT"] = settings.langfuse_environment
                 self._langfuse = Langfuse(
@@ -106,7 +139,12 @@ class LLMCategoryResolver:
 
     @property
     def enabled(self) -> bool:
-        return bool(self._settings.use_llm and self._settings.llm_base_url and self._settings.llm_model)
+        return bool(
+            _llm_dependencies_available()
+            and self._settings.use_llm
+            and self._settings.llm_base_url
+            and self._settings.llm_model
+        )
 
     def _effective_timeout_seconds(self) -> float:
         return min(
@@ -160,6 +198,16 @@ class LLMCategoryResolver:
             model_name=self._settings.llm_model,
             hard_timeout_ms=int(self._settings.llm_category_timeout_seconds * 1000),
         )
+        if self._settings.use_llm and not _llm_dependencies_available():
+            return self._fallback_result(
+                reason="dependencies_unavailable",
+                metadata=telemetry.finish(
+                    fallback_used=True,
+                    timeout_occurred=False,
+                    rule_vs_llm_path="llm_dependencies_unavailable",
+                    llm_attempted=False,
+                ),
+            )
         if not self.enabled:
             return self._fallback_result(
                 reason="disabled",
@@ -331,6 +379,8 @@ class LLMCategoryResolver:
     def _get_model(self) -> object:
         if self._model is not None:
             return self._model
+        if not _llm_dependencies_available() or AgentConfig is None or openai_model_from_config is None:
+            raise RuntimeError(_missing_llm_dependencies_message()) from _LLM_DEPENDENCIES_ERROR
 
         config = AgentConfig(
             model=self._settings.llm_model,

@@ -1,3 +1,4 @@
+-r requirements.txt
 # Requires Python >= 3.12 (because pydantic-ai-langfuse-extras has py>=3.12)
 langfuse>=3.10.1
 pydantic-ai @ git+https://gitea.green-garden.ru/ai-department/pydantic-ai.git

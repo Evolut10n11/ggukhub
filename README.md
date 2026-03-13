@@ -32,7 +32,10 @@ LLM-слой перестроен на:
 │  └─ tariffs.json
 ├─ tests
 ├─ .env.example
+├─ pyproject.toml
 ├─ requirements.txt
+├─ requirements-dev.txt
+├─ requirements-speech.txt
 └─ requirements-llm.txt
 ```
 
@@ -51,20 +54,64 @@ uv venv
 pip install -r requirements.txt
 ```
 
+Опциональные профили:
+```bash
+pip install -r requirements-speech.txt   # local faster-whisper
+pip install -r requirements-llm.txt      # Qwen / Langfuse / pydantic-ai
+pip install -r requirements-dev.txt      # полный dev/test-профиль
+```
+
+Если хотите вести проект через `uv`, используйте:
+```bash
+uv sync
+uv sync --extra speech
+uv sync --extra llm
+uv sync --extra dev
+```
+
 3. Настройте переменные:
 ```bash
 cp .env.example .env
 ```
 
-4. Запустите API:
+4. Для локальной разработки запустите API:
 ```bash
 uvicorn app.main:app --reload
 ```
 
-5. Запустите Telegram-бота (polling):
+5. Для production используйте обычный запуск без `--reload`:
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+6. Запустите Telegram-бота (polling):
 ```bash
 python -m app.run_bot
 ```
+
+7. Если нужен один процесс и одно окно для FastAPI + Telegram polling:
+```bash
+python -m app.run_stack
+```
+
+По умолчанию локальная SQLite БД и lock-файл создаются в каталоге `var/`, а не в корне проекта.
+
+## Ubuntu + uv
+Для сервера на Ubuntu можно идти через `uv` без ручного `pip`:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
+uv run green-garden-stack
+```
+
+Доступные entrypoint'ы:
+```bash
+uv run green-garden-api
+uv run green-garden-bot
+uv run green-garden-stack
+```
+
+`green-garden-stack` поднимает API и Telegram polling в одном процессе. Если `TELEGRAM_USE_WEBHOOK=true`, этот runner запускает только API, потому что webhook-бот уже обслуживается внутри FastAPI.
 
 ## LLM-профиль (обязательные репо `pydantic-ai` + `pydantic-ai-langfuse-extras`)
 LLM-профиль требует Python `>=3.12` (ограничение `pydantic-ai-langfuse-extras`).
@@ -76,8 +123,8 @@ pip install -r requirements-llm.txt
 
 Если нет доступа к Gitea, можно ставить из локальных клонов:
 ```bash
-pip install C:/Users/rodionov.ip/Desktop/git/pydantic-ai
-pip install C:/Users/rodionov.ip/Desktop/git/pydantic-ai-langfuse-extras
+pip install <path-to-local-clone>/pydantic-ai
+pip install <path-to-local-clone>/pydantic-ai-langfuse-extras
 ```
 
 ## DSPy: автогенерация системного промпта
@@ -97,7 +144,7 @@ python scripts/generate_system_prompt_dspy.py --output app/prompts/system.dspy.t
 ```powershell
 pwsh ./scripts/sync_langfuse_repos.ps1
 ```
-По умолчанию они синхронизируются в `C:\Users\rodionov.ip\Desktop\git`.
+По умолчанию они синхронизируются в `%USERPROFILE%\git`.
 
 ## Langfuse: синхронизация промпта из репозитория
 Чтобы "привязать репозиторий" к Langfuse в рабочем процессе, синхронизируйте промпт напрямую из проекта:
@@ -130,7 +177,7 @@ python scripts/sync_prompt_to_langfuse.py
 ## LLM
 - По умолчанию: `USE_LLM=false`, работает `RuleResponder`.
 - LLM-режим разрешен только с моделью `Qwen3.5-35B-A3B`.
-- Базовый URL в `.env`: `LLM_BASE_URL=http://192.168.130.159:8080/v1`.
+- `LLM_BASE_URL` нужно задать явно, например `http://localhost:8080/v1` или URL вашего OpenAI-compatible gateway.
 - Лимит ответа модели: `LLM_MAX_TOKENS=12288` (можно поднять выше при необходимости).
 - Размер few-shot контекста: `LLM_FEW_SHOT_LIMIT=20` (по умолчанию берутся все доступные примеры).
 - При заполнении `LANGFUSE_*` включается tracing через `pydantic-ai-langfuse-extras`.
@@ -145,7 +192,7 @@ python scripts/sync_prompt_to_langfuse.py
   - `SPEECH_DEVICE=cpu`
   - `SPEECH_COMPUTE_TYPE=int8`
 - После распознавания бот отправляет пользователю текст и продолжает сценарий заявки.
-- Установка локального STT: `pip install faster-whisper`
+- Установка локального STT: `pip install -r requirements-speech.txt`
 - Альтернатива через API: можно задать `SPEECH_BASE_URL=https://api.openai.com/v1`, `SPEECH_MODEL=gpt-4o-transcribe`, `SPEECH_API_KEY=<key>`.
 
 ## Ускорение отправки заявки
@@ -154,8 +201,16 @@ python scripts/sync_prompt_to_langfuse.py
 - Для более быстрого LLM-ответа уменьшите `LLM_MAX_TOKENS` до `256-512` и `LLM_FEW_SHOT_LIMIT` до `4-8`.
 
 ## Тесты
+Полный прогон тестов требует `pip install -r requirements-dev.txt`.
+
 ```bash
 pytest -q
+```
+
+Через `uv`:
+```bash
+uv sync --extra dev
+uv run pytest -q
 ```
 
 Qwen-тесты:
@@ -170,12 +225,14 @@ pytest -q tests/test_bitrix_ticket_flow.py -k "not live"
 
 Live-smoke с реальным Qwen (опционально):
 ```bash
+set QWEN_TEST_BASE_URL=http://localhost:8080/v1
 set RUN_QWEN_LIVE_TESTS=1
 pytest -q tests/test_llm_responder_qwen.py -k live
 ```
 
 Live-smoke с Langfuse (опционально):
 ```bash
+set QWEN_TEST_BASE_URL=http://localhost:8080/v1
 set RUN_LANGFUSE_LIVE_TESTS=1
 pytest -q tests/test_langfuse_live.py
 ```
@@ -188,6 +245,7 @@ pytest -q tests/test_bitrix_ticket_flow.py -k live
 
 Набор из 10 live-сценариев Langfuse:
 ```bash
+set QWEN_TEST_BASE_URL=http://localhost:8080/v1
 set RUN_LANGFUSE_LIVE_TESTS=1
 pytest -q -s tests/test_langfuse_10_scenarios_live.py
 ```

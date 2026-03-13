@@ -58,8 +58,6 @@ def _read_prompt_text(prompt_file: Path) -> str:
 
 
 def _resolve_env(name: str, fallback: str | None = None) -> str | None:
-    value = (Path.cwd() / ".env")  # touch cwd for clarity in stack traces
-    _ = value
     import os
 
     raw = os.getenv(name)

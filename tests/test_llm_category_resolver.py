@@ -262,11 +262,15 @@ async def test_resolver_uses_soft_timeout_budget(monkeypatch: pytest.MonkeyPatch
     reason="Set RUN_QWEN_LIVE_TESTS=1 to run real Qwen live category smoke",
 )
 async def test_resolver_live_qwen_typo_phrase() -> None:
+    llm_base_url = (os.getenv("QWEN_TEST_BASE_URL") or os.getenv("LLM_BASE_URL") or "").strip()
+    if not llm_base_url:
+        pytest.skip("QWEN_TEST_BASE_URL or LLM_BASE_URL is not configured")
+
     settings = Settings(
         telegram_bot_token="x",
         use_llm=True,
         llm_model=ALLOWED_LLM_MODEL,
-        llm_base_url=os.getenv("QWEN_TEST_BASE_URL", "http://192.168.130.159:8080/v1"),
+        llm_base_url=llm_base_url,
         llm_api_key=os.getenv("QWEN_TEST_API_KEY", ""),
         llm_max_tokens=8192,
     )

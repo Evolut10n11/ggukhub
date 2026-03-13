@@ -526,11 +526,15 @@ async def test_qwen_responder_empty_output_uses_placeholder_and_rule_fallback(
     reason="Set RUN_QWEN_LIVE_TESTS=1 to run real Qwen integration smoke",
 )
 async def test_qwen_live_smoke_report_created() -> None:
+    llm_base_url = (os.getenv("QWEN_TEST_BASE_URL") or os.getenv("LLM_BASE_URL") or "").strip()
+    if not llm_base_url:
+        pytest.skip("QWEN_TEST_BASE_URL or LLM_BASE_URL is not configured")
+
     settings = Settings(
         telegram_bot_token="x",
         use_llm=True,
         llm_model=ALLOWED_LLM_MODEL,
-        llm_base_url=os.getenv("QWEN_TEST_BASE_URL", "http://192.168.130.159:8080/v1"),
+        llm_base_url=llm_base_url,
         llm_api_key=os.getenv("QWEN_TEST_API_KEY", ""),
         llm_max_tokens=256,
     )

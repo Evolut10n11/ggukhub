@@ -79,20 +79,21 @@ class DialogReportFinalizer:
             budget_ms=self._confirmation_budget_ms,
         )
         draft = self.build_report_draft(data, user)
-        report = await self._storage.create_report(
-            ReportCreate(
-                user_id=user.id,
-                jk=draft.jk,
-                address=draft.address,
-                apt=draft.apartment,
-                phone=draft.phone,
-                category=draft.category,
-                text=draft.problem_text,
-                scope_key=draft.scope_key,
-            )
+        report_create = ReportCreate(
+            user_id=user.id,
+            jk=draft.jk,
+            address=draft.address,
+            apt=draft.apartment,
+            phone=draft.phone,
+            category=draft.category,
+            text=draft.problem_text,
+            scope_key=draft.scope_key,
         )
 
+        incident = None
+        report = await self._storage.create_report(report_create)
         incident = await self._incidents.evaluate_report(report)
+
         normalized_report = {
             "local_report_id": report.id,
             "user_id": user.id,

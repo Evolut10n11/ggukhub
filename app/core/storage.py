@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Select, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+logger = logging.getLogger(__name__)
 
 from app.core.enums import IncidentStatus, is_active_report_status
 from app.core.models import BitrixEvent, Incident, IncidentEvent, Report, ReportAuditLog, SessionState, User
@@ -86,6 +89,27 @@ class Storage:
         async with self._session_factory() as session:
             report = Report(**payload.model_dump())
             session.add(report)
+            await session.commit()
+            await session.refresh(report)
+            return report
+
+    async def create_report_with_audit(
+        self,
+        report_payload: ReportCreate,
+        audit_payload: ReportAuditCreate | None,
+    ) -> Report:
+        async with self._session_factory() as session:
+            report = Report(**report_payload.model_dump())
+            session.add(report)
+            await session.flush()
+            if audit_payload is not None:
+                item = ReportAuditLog(
+                    report_id=report.id,
+                    stage=audit_payload.stage,
+                    regulation_version=audit_payload.regulation_version,
+                    payload_json=dump_json(audit_payload.payload),
+                )
+                session.add(item)
             await session.commit()
             await session.refresh(report)
             return report
@@ -187,6 +211,15 @@ class Storage:
 
     async def create_incident(self, scope_key: str, category: str, public_message: str) -> Incident:
         async with self._session_factory() as session:
+            existing = await session.execute(
+                select(Incident)
+                .where(Incident.scope_key == scope_key)
+                .where(Incident.status == IncidentStatus.ACTIVE.value)
+            )
+            found = existing.scalar_one_or_none()
+            if found is not None:
+                return found
+
             incident = Incident(
                 scope_key=scope_key,
                 category=category,
@@ -211,6 +244,7 @@ class Storage:
                 await session.commit()
             except IntegrityError:
                 await session.rollback()
+                logger.debug("Duplicate incident-report link: incident=%s report=%s", incident_id, report_id)
 
     async def create_bitrix_event(
         self,

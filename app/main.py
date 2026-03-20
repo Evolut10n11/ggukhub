@@ -14,6 +14,8 @@ from app.telegram.bot import configure_bot_ui, create_bot, create_dispatcher
 
 logger = logging.getLogger(__name__)
 
+MAX_WEBHOOK_BODY_BYTES = 256 * 1024  # 256 KB
+
 
 async def _bind_runtime(app: FastAPI, runtime: AppRuntime) -> None:
     app.state.runtime = runtime
@@ -94,6 +96,7 @@ def _register_routes(app: FastAPI) -> None:
         request: Request,
         x_bitrix_secret: str | None = Header(default=None),
     ) -> dict[str, Any]:
+        _check_body_size(request)
         runtime = _runtime_from_request(request)
         try:
             payload = await request.json()
@@ -110,6 +113,7 @@ def _register_routes(app: FastAPI) -> None:
         request: Request,
         x_telegram_bot_api_secret_token: str | None = Header(default=None),
     ) -> dict[str, bool]:
+        _check_body_size(request)
         runtime = _runtime_from_request(request)
         settings = runtime.services.settings
         if not settings.telegram_use_webhook:
@@ -142,6 +146,12 @@ def _register_routes(app: FastAPI) -> None:
                 for row in rows
             ],
         }
+
+
+def _check_body_size(request: Request) -> None:
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_WEBHOOK_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="Payload too large")
 
 
 def _safe_json_loads(raw: str | None) -> Any:

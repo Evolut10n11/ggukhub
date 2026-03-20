@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -16,6 +16,10 @@ from app.core.utils import dump_json
 class Storage:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
         self._session_factory = session_factory
+
+    async def health_check(self) -> None:
+        async with self._session_factory() as session:
+            await session.execute(text("SELECT 1"))
 
     async def upsert_user(self, telegram_id: int, name: str | None) -> User:
         async with self._session_factory() as session:

@@ -7,7 +7,7 @@ from app.bitrix.models import BitrixParsedEvent
 
 def verify_bitrix_secret(payload: dict[str, Any], provided_secret: str | None, expected_secret: str | None) -> bool:
     if not expected_secret:
-        return True
+        return False
 
     candidates: list[str | None] = [
         provided_secret,

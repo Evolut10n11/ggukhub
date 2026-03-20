@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -10,6 +11,8 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from app.config import Settings, get_settings
 from app.core.runtime import AppRuntime, create_app_runtime
 from app.telegram.bot import configure_bot_ui, create_bot, create_dispatcher
+
+logger = logging.getLogger(__name__)
 
 
 async def _bind_runtime(app: FastAPI, runtime: AppRuntime) -> None:
@@ -71,8 +74,20 @@ def _runtime_from_request(request: Request) -> AppRuntime:
 
 def _register_routes(app: FastAPI) -> None:
     @app.get("/health")
-    async def health() -> dict[str, str]:
-        return {"status": "ok"}
+    async def health(request: Request) -> dict[str, Any]:
+        runtime = _runtime_from_request(request)
+        db_ok = False
+        try:
+            await runtime.services.storage.health_check()
+            db_ok = True
+        except Exception:
+            pass
+        status = "ok" if db_ok else "degraded"
+        return {
+            "status": status,
+            "db": "ok" if db_ok else "error",
+            "bitrix": "enabled" if runtime.services.bitrix_service.enabled else "disabled",
+        }
 
     @app.post("/bitrix/webhook")
     async def bitrix_webhook(
@@ -80,7 +95,10 @@ def _register_routes(app: FastAPI) -> None:
         x_bitrix_secret: str | None = Header(default=None),
     ) -> dict[str, Any]:
         runtime = _runtime_from_request(request)
-        payload = await request.json()
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
         provided_secret = x_bitrix_secret or request.query_params.get("secret")
         result = await runtime.services.bitrix_webhook.handle(payload=payload, provided_secret=provided_secret)
         if not result.accepted:
@@ -99,7 +117,10 @@ def _register_routes(app: FastAPI) -> None:
         if settings.telegram_webhook_secret and x_telegram_bot_api_secret_token != settings.telegram_webhook_secret:
             raise HTTPException(status_code=403, detail="Invalid Telegram secret token")
 
-        payload = await request.json()
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
         update = Update.model_validate(payload)
         await request.app.state.webhook_dispatcher.feed_update(request.app.state.webhook_bot, update)
         return {"ok": True}
@@ -115,12 +136,22 @@ def _register_routes(app: FastAPI) -> None:
                     "id": row.id,
                     "stage": row.stage,
                     "regulation_version": row.regulation_version,
-                    "payload": json.loads(row.payload_json),
+                    "payload": _safe_json_loads(row.payload_json),
                     "created_at": row.created_at.isoformat(),
                 }
                 for row in rows
             ],
         }
+
+
+def _safe_json_loads(raw: str | None) -> Any:
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Corrupted audit payload JSON: %.100s", raw)
+        return {"_raw": raw}
 
 
 app = create_app()

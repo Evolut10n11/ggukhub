@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config.settings import Settings
 from app.core.classifier import CategoryClassifier
-from app.core.llm_category import LLMCategoryResolver
 from app.core.models import Base
 from app.core.services import AppServices
 from app.core.storage import Storage
@@ -68,11 +67,9 @@ async def _build_services(db_path: Path) -> tuple[AppServices, object]:
 
     settings = Settings(
         telegram_bot_token="test-token",
-        use_llm=False,
         incident_threshold=999,
     )
     classifier = CategoryClassifier.from_file(Path("data/categories.json"))
-    llm_category = LLMCategoryResolver(settings, classifier)
     storage = Storage(session_factory)
     incidents = IncidentService(storage=storage, detector=SpikeDetector(window_minutes=15, threshold=999))
 
@@ -80,7 +77,6 @@ async def _build_services(db_path: Path) -> tuple[AppServices, object]:
         settings=settings,
         storage=storage,
         classifier=classifier,
-        llm_category=llm_category,
         incidents=incidents,
         responder=RuleResponder(),
         speech=_SpeechStub(),

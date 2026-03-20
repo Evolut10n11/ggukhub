@@ -61,7 +61,6 @@ async def _build_services(db_path: Path) -> tuple[AppServices, object]:
 
     settings = Settings(
         telegram_bot_token="test-token",
-        use_llm=False,
         incident_threshold=999,
     )
     classifier = CategoryClassifier.from_file(Path("data/categories.json"))
@@ -72,7 +71,6 @@ async def _build_services(db_path: Path) -> tuple[AppServices, object]:
         settings=settings,
         storage=storage,
         classifier=classifier,
-        llm_category=SimpleNamespace(resolve=_never_resolve),
         incidents=incidents,
         responder=RuleResponder(),
         speech=_SpeechStub(),
@@ -84,11 +82,6 @@ async def _build_services(db_path: Path) -> tuple[AppServices, object]:
         tariffs=TariffDirectory(Path("data/tariffs.json")),
     )
     return services, engine
-
-
-async def _never_resolve(problem_text: str) -> None:
-    _ = problem_text
-    return None
 
 
 async def _send_user_text(services: AppServices, user_id: int, text: str) -> list[str]:

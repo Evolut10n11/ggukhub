@@ -1,44 +1,51 @@
-# Local environment
+# ── Environment ──────────────────────────────────────────
 .env
 .env.local
 .env.*.local
 
-# Virtual environments
-venv/
-venv312/
-.venv/
-
-# Python cache / artifacts
+# ── Python ──────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
 
-# Tool caches
+# ── Virtual environments ────────────────────────────────
+.venv/
+venv/
+venv*/
+
+# ── Build / packaging ──────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+*.whl
+
+# ── Testing / linting caches ───────────────────────────
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# Coverage / test outputs
 .coverage
 .coverage.*
 htmlcov/
 
-# Build artifacts
-build/
-dist/
-*.egg-info/
-
-# Local runtime data
-app.db
+# ── Runtime data (created at startup, not in repo) ─────
+var/
 *.db
 *.sqlite
 *.sqlite3
 .bot.lock
 *.log
-var/
 
-# IDE / OS
+# ── IDE / OS ───────────────────────────────────────────
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# ── Claude Code ────────────────────────────────────────
+.claude/

@@ -19,7 +19,7 @@ def test_create_app_does_not_initialize_runtime_before_lifespan(monkeypatch) -> 
 
     monkeypatch.setattr("app.main.create_app_runtime", fake_create_app_runtime)
 
-    app = create_app(Settings(telegram_bot_token="x", use_llm=False))
+    app = create_app(Settings(telegram_bot_token="x"))
 
     assert app.title == "Green Garden UK Assistant"
     assert called is False
@@ -46,7 +46,7 @@ async def test_create_app_can_reuse_external_runtime_without_managing_it(monkeyp
 
     monkeypatch.setattr("app.main.create_app_runtime", fake_create_app_runtime)
 
-    settings = Settings(telegram_bot_token="x", use_llm=False)
+    settings = Settings(telegram_bot_token="x")
     runtime = DummyRuntime(settings)
     app = create_app(settings=settings, runtime=runtime, manage_runtime=False)
 

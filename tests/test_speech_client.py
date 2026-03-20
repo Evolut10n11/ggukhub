@@ -8,7 +8,7 @@ from app.speech.client import SpeechToTextClient, SpeechToTextError
 def _settings(*, speech_enabled: bool = True) -> Settings:
     return Settings(
         telegram_bot_token="test-token",
-        use_llm=False,
+
         speech_enabled=speech_enabled,
         speech_base_url="http://stt.local/v1",
         speech_model="whisper-1",
@@ -54,7 +54,7 @@ async def test_transcribe_audio_disabled_raises() -> None:
 async def test_transcribe_audio_openai_without_api_key_raises() -> None:
     settings = Settings(
         telegram_bot_token="test-token",
-        use_llm=False,
+
         speech_enabled=True,
         speech_base_url="https://api.openai.com/v1",
         speech_model="gpt-4o-transcribe",
@@ -70,7 +70,7 @@ async def test_transcribe_audio_openai_without_api_key_raises() -> None:
 async def test_transcribe_audio_local_mode() -> None:
     settings = Settings(
         telegram_bot_token="test-token",
-        use_llm=False,
+
         speech_enabled=True,
         speech_base_url="local://faster-whisper",
         speech_model="small",

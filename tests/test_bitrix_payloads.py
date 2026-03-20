@@ -16,7 +16,7 @@ from app.config.settings import Settings
 def test_build_create_ticket_payload_maps_domain_fields() -> None:
     settings = Settings(
         telegram_bot_token="x",
-        use_llm=False,
+
         bitrix_webhook_url="https://bitrix.example/rest/1/webhook",
     )
     payload = build_create_ticket_payload(

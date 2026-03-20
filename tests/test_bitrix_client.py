@@ -16,7 +16,7 @@ from app.config.settings import Settings
 def _settings() -> Settings:
     return Settings(
         telegram_bot_token="x",
-        use_llm=False,
+
         bitrix_webhook_url="https://bitrix.example/rest/1/webhook",
     )
 
@@ -47,7 +47,7 @@ async def test_bitrix_client_reuses_async_client_and_closes_it() -> None:
 def test_bitrix_client_uses_configured_timeout() -> None:
     settings = Settings(
         telegram_bot_token="x",
-        use_llm=False,
+
         bitrix_webhook_url="https://bitrix.example/rest/1/webhook",
         bitrix_timeout_seconds=7.5,
     )
@@ -86,7 +86,7 @@ async def test_bitrix_client_raises_api_and_format_errors() -> None:
 
 @pytest.mark.asyncio
 async def test_bitrix_client_raises_configuration_error_when_disabled() -> None:
-    client = BitrixApiClient(Settings(telegram_bot_token="x", use_llm=False))
+    client = BitrixApiClient(Settings(telegram_bot_token="x"))
 
     with pytest.raises(BitrixConfigurationError):
         await client.call("crm.lead.add", {"fields": {}})

@@ -24,7 +24,6 @@ class DialogStep(str, Enum):
 
 class ClassificationSource(str, Enum):
     RULES = "rules"
-    LLM = "llm"
     MANUAL = "manual"
 
 

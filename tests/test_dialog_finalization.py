@@ -9,24 +9,9 @@ from app.core.models import Base
 from app.core.storage import Storage
 from app.incidents.detector import SpikeDetector
 from app.incidents.service import IncidentService
-from app.responders.models import GeneratedResponse, ResponseGeneratorSource
+from app.responders.rule_responder import RuleResponder
 from app.telegram.dialog.finalization import DialogReportFinalizer
 from app.telegram.dialog.models import DialogSessionData
-
-
-class _ResponderStub:
-    async def build_report_created(self, local_id: int, bitrix_id: str | None) -> GeneratedResponse:
-        _ = bitrix_id
-        return GeneratedResponse(
-            text=f"Заявка {local_id} зарегистрирована.",
-            source=ResponseGeneratorSource.RULES,
-            metadata={
-                "responder_mode": "rules",
-                "fallback_used": False,
-                "rule_vs_llm_path": "rules",
-                "timeout_occurred": False,
-            },
-        )
 
 
 class _BitrixStub:
@@ -56,7 +41,7 @@ async def test_dialog_finalizer_returns_structured_confirmation_metadata(tmp_pat
     finalizer = DialogReportFinalizer(
         storage=storage,
         incidents=incidents,
-        responder=_ResponderStub(),
+        responder=RuleResponder(),
         bitrix_service=_BitrixStub(),
         notifier=_NotifierStub(),
         label_resolver=lambda code: {"elevator": "Лифт", "other": "Другое"}.get(code, code),
@@ -78,8 +63,6 @@ async def test_dialog_finalizer_returns_structured_confirmation_metadata(tmp_pat
 
     assert result.confirmation.local_report_id == result.report.id
     assert result.confirmation.category == "elevator"
-    assert result.confirmation.responder_mode == "rules"
-    assert result.confirmation.fallback_used is False
     assert "Сводка по заявке" in result.confirmation.summary
     assert result.confirmation.metadata["flow_name"] == "report_created"
     assert result.confirmation.metadata["step_name"] == "confirmation_reply"

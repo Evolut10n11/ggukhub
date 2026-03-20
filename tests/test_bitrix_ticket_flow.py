@@ -14,7 +14,6 @@ from app.bitrix.client import BitrixApiClient, BitrixClientError
 from app.bitrix.service import BitrixTicketService
 from app.config.settings import Settings
 from app.core.classifier import CategoryClassifier
-from app.core.llm_category import LLMCategoryResolver
 from app.core.models import Base, Report, User
 from app.core.services import AppServices
 from app.core.storage import Storage
@@ -96,12 +95,10 @@ async def _build_services(db_path: Path, *, bitrix_client: Any, notifier: _Notif
 
     settings = Settings(
         telegram_bot_token="test-token",
-        use_llm=False,
         incident_threshold=999,
         bitrix_webhook_url="https://bitrix.example/rest/1/webhook",
     )
     classifier = CategoryClassifier.from_file(Path("data/categories.json"))
-    llm_category = LLMCategoryResolver(settings, classifier)
     storage = Storage(session_factory)
     incidents = IncidentService(storage=storage, detector=SpikeDetector(window_minutes=15, threshold=999))
 
@@ -109,7 +106,6 @@ async def _build_services(db_path: Path, *, bitrix_client: Any, notifier: _Notif
         settings=settings,
         storage=storage,
         classifier=classifier,
-        llm_category=llm_category,
         incidents=incidents,
         responder=RuleResponder(),
         speech=_SpeechStub(),
@@ -146,7 +142,7 @@ async def _run_full_dialog_flow(services: AppServices, *, user_id: int, phone: s
 async def test_bitrix_client_create_ticket_builds_expected_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(
         telegram_bot_token="x",
-        use_llm=False,
+
         bitrix_webhook_url="https://bitrix.example/rest/1/webhook",
     )
     api_client = BitrixApiClient(settings)
@@ -354,7 +350,7 @@ async def test_bitrix_live_create_ticket_smoke() -> None:
 
     settings = Settings(
         telegram_bot_token="x",
-        use_llm=False,
+
         bitrix_webhook_url=os.getenv("BITRIX_WEBHOOK_URL"),
     )
     client = BitrixTicketService(settings=settings, client=BitrixApiClient(settings))

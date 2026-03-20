@@ -5,27 +5,14 @@ from dataclasses import dataclass, field
 from app.bitrix.client import BitrixApiClient
 from app.bitrix.service import BitrixTicketService, BitrixWebhookService
 from app.config import Settings
-from app.core.category_resolution import CategoryResolver
 from app.core.classifier import CategoryClassifier
 from app.core.storage import Storage
 from app.core.tariffs import TariffDirectory
 from app.incidents.service import IncidentService
-from app.responders.base import BaseResponder
+from app.responders.rule_responder import RuleResponder
 from app.speech.client import SpeechToTextClient
 from app.telegram.dialog.runtime import DialogRuntimeState
 from app.telegram.notifier import TelegramNotifier
-
-
-@dataclass(slots=True)
-class ClassificationDeps:
-    classifier: CategoryClassifier
-    llm_category: CategoryResolver
-
-
-@dataclass(slots=True)
-class ResponderDeps:
-    responder: BaseResponder
-    notifier: TelegramNotifier
 
 
 @dataclass(slots=True)
@@ -39,9 +26,8 @@ class BitrixDeps:
 class DialogDeps:
     storage: Storage
     classifier: CategoryClassifier
-    llm_category: CategoryResolver
     incidents: IncidentService
-    responder: BaseResponder
+    responder: RuleResponder
     bitrix_service: BitrixTicketService
     notifier: TelegramNotifier
     speech: SpeechToTextClient
@@ -54,9 +40,8 @@ class AppServices:
     settings: Settings
     storage: Storage
     classifier: CategoryClassifier
-    llm_category: CategoryResolver
     incidents: IncidentService
-    responder: BaseResponder
+    responder: RuleResponder
     speech: SpeechToTextClient
     bitrix_client: BitrixApiClient
     bitrix_service: BitrixTicketService
@@ -65,18 +50,6 @@ class AppServices:
     housing_complexes: list[str]
     tariffs: TariffDirectory
     dialog_runtime: DialogRuntimeState = field(default_factory=DialogRuntimeState)
-
-    def classification_deps(self) -> ClassificationDeps:
-        return ClassificationDeps(
-            classifier=self.classifier,
-            llm_category=self.llm_category,
-        )
-
-    def responder_deps(self) -> ResponderDeps:
-        return ResponderDeps(
-            responder=self.responder,
-            notifier=self.notifier,
-        )
 
     def bitrix_deps(self) -> BitrixDeps:
         return BitrixDeps(
@@ -89,7 +62,6 @@ class AppServices:
         return DialogDeps(
             storage=self.storage,
             classifier=self.classifier,
-            llm_category=self.llm_category,
             incidents=self.incidents,
             responder=self.responder,
             bitrix_service=self.bitrix_service,

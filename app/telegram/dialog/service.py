@@ -57,10 +57,7 @@ class DialogService:
             storage=self._deps.storage,
             housing_complexes=self._deps.housing_complexes,
         )
-        self._category_service = DialogCategoryService(
-            self._deps.classifier,
-            self._deps.llm_category,
-        )
+        self._category_service = DialogCategoryService(self._deps.classifier)
         self._report_lookup_service = DialogReportLookupService(
             self._deps.storage,
             self._deps.classifier.label,

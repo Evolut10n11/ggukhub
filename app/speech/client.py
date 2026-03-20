@@ -137,6 +137,11 @@ class SpeechToTextClient:
                 chunks.append(text)
         return " ".join(chunks).strip()
 
+    def close(self) -> None:
+        if self._local_model is not None:
+            del self._local_model
+            self._local_model = None
+
     @staticmethod
     def _extract_text(payload: dict[str, Any]) -> str:
         text = payload.get("text")

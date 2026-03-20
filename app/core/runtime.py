@@ -18,6 +18,8 @@ class AppRuntime:
         await self.db.init()
 
     async def close(self) -> None:
+        if hasattr(self.services.speech, "close"):
+            self.services.speech.close()
         await self.services.notifier.close()
         await self.services.bitrix_client.close()
         await self.db.close()

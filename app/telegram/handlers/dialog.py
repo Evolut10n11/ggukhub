@@ -337,6 +337,13 @@ async def text_dialog_handler(message: Message, services: AppServices) -> None:
     await _process_text_dialog(message, services, text)
 
 
+@router.message()
+async def unsupported_content_handler(message: Message) -> None:
+    if message.from_user is None:
+        return
+    await message.answer("Я принимаю только текстовые и голосовые сообщения. Напишите или надиктуйте вашу проблему.")
+
+
 @router.error()
 async def error_handler(event: ErrorEvent) -> bool:
     logger.exception("Telegram handler error: %s", event.exception, exc_info=event.exception)

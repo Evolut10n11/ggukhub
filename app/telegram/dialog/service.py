@@ -78,27 +78,44 @@ class DialogService:
 
     async def start(self, transport: DialogTransport, *, include_welcome: bool) -> None:
         user = await self._upsert_user(transport.telegram_id, transport.display_name)
-        await self._save_snapshot(user.id, DialogStep.AWAITING_JK, DialogSessionData())
-        await self._send_onboarding(transport, include_welcome=include_welcome)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step not in (DialogStep.IDLE, DialogStep.AWAITING_JK):
+                await self._save_snapshot(user.id, DialogStep.AWAITING_JK, DialogSessionData())
+                await transport.send_text(
+                    "Предыдущая заявка сброшена. Начнём новую — выберите ЖК:",
+                    build_jk_keyboard(self._deps.housing_complexes, page=0),
+                )
+                return
+            await self._save_snapshot(user.id, DialogStep.AWAITING_JK, DialogSessionData())
+            await self._send_onboarding(transport, include_welcome=include_welcome)
 
     async def select_housing_complex(self, transport: DialogTransport, complex_name: str) -> None:
         user = await self._upsert_user(transport.telegram_id, transport.display_name)
-        snapshot = await self._load_snapshot(user.id)
-        data = snapshot.data.model_copy(deep=True)
-        data.jk = complex_name
-        await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
-        await transport.send_text("Спасибо. Уточните, пожалуйста, дом.", None)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step != DialogStep.AWAITING_JK:
+                await transport.send_text(_STALE_CALLBACK_TEXT, None)
+                return
+            data = snapshot.data.model_copy(deep=True)
+            data.jk = complex_name
+            await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
+            await transport.send_text("Спасибо. Уточните, пожалуйста, дом.", None)
 
     async def mark_unknown_housing_complex(self, transport: DialogTransport) -> None:
         user = await self._upsert_user(transport.telegram_id, transport.display_name)
-        snapshot = await self._load_snapshot(user.id)
-        data = snapshot.data.model_copy(deep=True)
-        data.jk = UNKNOWN_JK_VALUE
-        await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
-        await transport.send_text(
-            "Поняла. Тогда подскажите адрес: дом, подъезд (если есть) и квартиру. Сначала — дом.",
-            None,
-        )
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step != DialogStep.AWAITING_JK:
+                await transport.send_text(_STALE_CALLBACK_TEXT, None)
+                return
+            data = snapshot.data.model_copy(deep=True)
+            data.jk = UNKNOWN_JK_VALUE
+            await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
+            await transport.send_text(
+                "Поняла. Тогда подскажите адрес: дом, подъезд (если есть) и квартиру. Сначала — дом.",
+                None,
+            )
 
     async def confirm_category(self, transport: DialogTransport) -> None:
         user = await self._upsert_user(transport.telegram_id, transport.display_name)
@@ -528,7 +545,8 @@ class DialogService:
             return
 
         await transport.send_text(
-            "Подтвердите категорию: нажмите кнопку или напишите «да» / «другое».",
+            "Подтвердите категорию: нажмите кнопку «Да» или напишите «да». "
+            "Если не подходит — «другое» или выберите другую.",
             None,
         )
 
@@ -549,7 +567,10 @@ class DialogService:
             label_resolver=self._deps.classifier.label,
         )
         if parsed_category is None:
-            await transport.send_text("Выберите категорию кнопками ниже.", build_category_select_keyboard())
+            await transport.send_text(
+                f"Не удалось определить категорию. Выберите кнопками ниже.\n{self._category_options_hint()}",
+                build_category_select_keyboard(),
+            )
             return
 
         data.category = parsed_category
@@ -746,12 +767,14 @@ class DialogService:
         result = await self._report_finalizer.finalize_report(user=user, data=data)
         await transport.send_text(result.reply_text, None)
         if self._deps.bitrix_service.enabled:
+            bitrix_timeout = float(getattr(self._deps.bitrix_service, "timeout_seconds", 10.0))
             self._runtime.register_background_task(
                 self._report_finalizer.sync_bitrix_ticket(
                     report=result.report,
                     user=user,
                     is_mass_incident=result.is_mass_incident,
-                )
+                ),
+                timeout_seconds=bitrix_timeout + 5.0,
             )
 
     def _build_report_review(self, data: DialogSessionData) -> str:
@@ -774,7 +797,8 @@ class DialogService:
         return (
             "Напишите, что нужно исправить. Можно одним сообщением: адрес, телефон, описание проблемы "
             "или категорию. Потом я еще раз покажу сводку.\n"
-            f"{self._category_options_hint()}"
+            f"{self._category_options_hint()}\n"
+            "Если хотите начать заново, напишите /new."
         )
 
     def _category_options_hint(self) -> str:

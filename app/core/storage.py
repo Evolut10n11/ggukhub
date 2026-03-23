@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, select, text
+from sqlalchemy import Select, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -93,6 +93,28 @@ class Storage:
             else:
                 session_state.state_json = serialized
             await session.commit()
+
+    async def count_active_reports_by_apt(self, address: str, apt: str) -> int:
+        async with self._session_factory() as session:
+            stmt = (
+                select(func.count())
+                .select_from(Report)
+                .where(Report.address == address, Report.apt == apt)
+                .where(Report.status == ReportStatus.NEW.value)
+            )
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
+    async def count_active_reports_by_phone(self, phone: str) -> int:
+        async with self._session_factory() as session:
+            stmt = (
+                select(func.count())
+                .select_from(Report)
+                .where(Report.phone == phone)
+                .where(Report.status == ReportStatus.NEW.value)
+            )
+            result = await session.execute(stmt)
+            return result.scalar() or 0
 
     async def create_report(self, payload: ReportCreate) -> Report:
         async with self._session_factory() as session:

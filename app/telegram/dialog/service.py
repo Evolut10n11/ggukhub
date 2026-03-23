@@ -10,7 +10,7 @@ from app.core.utils import normalize_phone
 from app.telegram.constants import CATEGORY_LABELS, UNKNOWN_JK_VALUE, WELCOME_TEXT
 from app.telegram.dialog.classification import DialogCategoryService
 from app.telegram.dialog.correction_flow import DialogCorrectionFlow
-from app.telegram.dialog.finalization import DialogReportFinalizer
+from app.telegram.dialog.finalization import DialogReportFinalizer, ReportLimitExceeded
 from app.telegram.dialog.formatters import (
     ReportReviewView,
     build_category_options_hint,
@@ -933,7 +933,11 @@ class DialogService:
         user: User,
         data: DialogSessionData,
     ) -> None:
-        result = await self._report_finalizer.finalize_report(user=user, data=data)
+        try:
+            result = await self._report_finalizer.finalize_report(user=user, data=data)
+        except ReportLimitExceeded as exc:
+            await transport.send_text(f"⚠ Не удалось создать заявку: {exc.reason}", None)
+            return
         await transport.send_text(result.reply_text, None)
         if self._deps.bitrix_service.enabled:
             bitrix_timeout = float(getattr(self._deps.bitrix_service, "timeout_seconds", 10.0))

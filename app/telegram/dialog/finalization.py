@@ -29,6 +29,14 @@ from app.telegram.notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
+MAX_ACTIVE_REPORTS = 5
+
+
+class ReportLimitExceeded(RuntimeError):
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
+
 
 @dataclass(slots=True)
 class DialogConfirmationResult:
@@ -79,6 +87,7 @@ class DialogReportFinalizer:
             budget_ms=self._confirmation_budget_ms,
         )
         draft = self.build_report_draft(data, user)
+        await self._check_report_limits(draft)
         report_create = ReportCreate(
             user_id=user.id,
             jk=draft.jk,
@@ -309,6 +318,22 @@ class DialogReportFinalizer:
 
         if contact_id:
             await self._bitrix_service.link_contact_to_lead(lead_id, contact_id)
+
+    async def _check_report_limits(self, draft: FinalizedReportDraft) -> None:
+        if draft.apartment and draft.address:
+            count = await self._storage.count_active_reports_by_apt(draft.address, draft.apartment)
+            if count >= MAX_ACTIVE_REPORTS:
+                raise ReportLimitExceeded(
+                    f"По адресу {draft.address}, кв. {draft.apartment} уже {count} активных заявок. "
+                    "Дождитесь обработки текущих заявок, прежде чем создавать новые."
+                )
+        if draft.phone:
+            count = await self._storage.count_active_reports_by_phone(draft.phone)
+            if count >= MAX_ACTIVE_REPORTS:
+                raise ReportLimitExceeded(
+                    f"По номеру {draft.phone} уже {count} активных заявок. "
+                    "Дождитесь обработки текущих заявок, прежде чем создавать новые."
+                )
 
     async def _store_audit_log(
         self,

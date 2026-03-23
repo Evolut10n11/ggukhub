@@ -3,13 +3,17 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.core.buildings import HouseInfo
 from app.telegram.constants import CATEGORY_LABELS
 
 JK_PAGE_SIZE = 8
 JK_BUTTON_COLUMNS = 2
 JK_BUTTON_MAX_LEN = 24
+HOUSE_PAGE_SIZE = 8
 MAIN_MENU_NEW_REQUEST = "Новая заявка"
 MAIN_MENU_STATUS = "Статус заявки"
+
+STANDALONE_JK_LABEL = "📍 Другой дом"
 
 
 def _display_housing_complex_name(name: str) -> str:
@@ -21,49 +25,90 @@ def _display_housing_complex_name(name: str) -> str:
     return value
 
 
-def build_jk_keyboard(complexes: list[str], page: int) -> InlineKeyboardMarkup:
+def build_jk_keyboard(complex_names: list[str], page: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    total = len(complexes)
+    total = len(complex_names)
     total_pages = max((total - 1) // JK_PAGE_SIZE + 1, 1)
     current_page = max(0, min(page, total_pages - 1))
 
     start = current_page * JK_PAGE_SIZE
     end = start + JK_PAGE_SIZE
-    visible_complexes = complexes[start:end]
+    visible = complex_names[start:end]
 
-    for row_start in range(0, len(visible_complexes), JK_BUTTON_COLUMNS):
+    for row_start in range(0, len(visible), JK_BUTTON_COLUMNS):
         row_buttons = [
             InlineKeyboardButton(
                 text=_display_housing_complex_name(name),
                 callback_data=f"jk_pick:{index}",
             )
             for index, name in enumerate(
-                visible_complexes[row_start : row_start + JK_BUTTON_COLUMNS],
+                visible[row_start : row_start + JK_BUTTON_COLUMNS],
                 start=start + row_start,
             )
         ]
         builder.row(*row_buttons)
 
-    nav_buttons: list[InlineKeyboardButton] = []
-    if current_page > 0:
-        nav_buttons.append(InlineKeyboardButton(text="◀ Назад", callback_data=f"jk_page:{current_page - 1}"))
-    nav_buttons.append(
-        InlineKeyboardButton(
-            text=f"Стр. {current_page + 1}/{total_pages}",
-            callback_data="jk_page:stay",
+    if total_pages > 1:
+        nav_buttons: list[InlineKeyboardButton] = []
+        if current_page > 0:
+            nav_buttons.append(InlineKeyboardButton(text="◀ Назад", callback_data=f"jk_page:{current_page - 1}"))
+        nav_buttons.append(
+            InlineKeyboardButton(text=f"Стр. {current_page + 1}/{total_pages}", callback_data="jk_page:stay")
         )
-    )
-    if current_page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton(text="Вперед ▶", callback_data=f"jk_page:{current_page + 1}"))
-    builder.row(*nav_buttons)
+        if current_page < total_pages - 1:
+            nav_buttons.append(InlineKeyboardButton(text="Вперед ▶", callback_data=f"jk_page:{current_page + 1}"))
+        builder.row(*nav_buttons)
 
-    builder.row(
-        InlineKeyboardButton(
-            text="Не вижу / не знаю свой ЖК",
-            callback_data="jk_unknown",
+    builder.row(InlineKeyboardButton(text=STANDALONE_JK_LABEL, callback_data="jk_standalone"))
+    builder.row(InlineKeyboardButton(text="❓ Нет в списке", callback_data="jk_unknown"))
+
+    return builder.as_markup()
+
+
+def build_house_keyboard(houses: list[HouseInfo], page: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    total = len(houses)
+    total_pages = max((total - 1) // HOUSE_PAGE_SIZE + 1, 1)
+    current_page = max(0, min(page, total_pages - 1))
+
+    start = current_page * HOUSE_PAGE_SIZE
+    end = start + HOUSE_PAGE_SIZE
+    visible = houses[start:end]
+
+    for i, house in enumerate(visible):
+        label = house.address
+        if len(label) > 30:
+            label = label[:29].rstrip() + "…"
+        builder.row(
+            InlineKeyboardButton(
+                text=label,
+                callback_data=f"house:{start + i}",
+            )
         )
-    )
 
+    if total_pages > 1:
+        nav_buttons: list[InlineKeyboardButton] = []
+        if current_page > 0:
+            nav_buttons.append(InlineKeyboardButton(text="◀ Назад", callback_data=f"house_p:{current_page - 1}"))
+        nav_buttons.append(
+            InlineKeyboardButton(text=f"Стр. {current_page + 1}/{total_pages}", callback_data="house_p:stay")
+        )
+        if current_page < total_pages - 1:
+            nav_buttons.append(InlineKeyboardButton(text="Вперед ▶", callback_data=f"house_p:{current_page + 1}"))
+        builder.row(*nav_buttons)
+
+    return builder.as_markup()
+
+
+def build_entrance_keyboard(entrances: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    buttons = [
+        InlineKeyboardButton(text=str(n), callback_data=f"ent:{n}")
+        for n in range(1, entrances + 1)
+    ]
+    cols = min(4, entrances)
+    for row_start in range(0, len(buttons), cols):
+        builder.row(*buttons[row_start : row_start + cols])
     return builder.as_markup()
 
 

@@ -232,7 +232,7 @@ class DialogReportFinalizer:
     def build_report_draft(data: DialogSessionData, user: User) -> FinalizedReportDraft:
         _ = user
         jk_value = str(data.jk or "").strip()
-        jk = jk_value if jk_value and jk_value != UNKNOWN_JK_VALUE else None
+        jk = jk_value if jk_value and jk_value not in (UNKNOWN_JK_VALUE, "__standalone__") else None
 
         house = str(data.house or "").strip()
         entrance = str(data.entrance or "").strip() or None

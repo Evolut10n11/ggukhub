@@ -22,7 +22,13 @@ from app.telegram.dialog.state_machine import (
     next_missing_step,
 )
 from app.telegram.extractors import ExtractedReportContext
-from app.telegram.keyboards import MAIN_MENU_NEW_REQUEST, MAIN_MENU_STATUS, build_jk_keyboard, build_main_menu_keyboard
+from app.telegram.keyboards import (
+    MAIN_MENU_NEW_REQUEST,
+    MAIN_MENU_STATUS,
+    build_house_keyboard,
+    build_jk_keyboard,
+    build_main_menu_keyboard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -174,9 +180,11 @@ async def status_command_handler(message: Message, services: AppServices) -> Non
     await _process_text_dialog(message, services, MAIN_MENU_STATUS)
 
 
+# ── JK callbacks ──
+
+
 @router.callback_query(F.data.startswith("jk_page:"))
 async def jk_page_handler(callback: CallbackQuery, services: AppServices) -> None:
-    _ = services
     await _ack_callback(callback)
     if callback.data is None:
         return
@@ -187,7 +195,9 @@ async def jk_page_handler(callback: CallbackQuery, services: AppServices) -> Non
     page = int(page_token)
     message = _callback_message(callback)
     if message is not None:
-        await message.edit_reply_markup(reply_markup=build_jk_keyboard(services.housing_complexes, page=page))
+        await message.edit_reply_markup(
+            reply_markup=build_jk_keyboard(services.building_registry.complex_names, page=page)
+        )
 
 
 @router.callback_query(F.data.startswith("jk_pick:"))
@@ -196,15 +206,24 @@ async def jk_pick_handler(callback: CallbackQuery, services: AppServices) -> Non
     if callback.data is None or callback.from_user is None:
         return
 
+    names = services.building_registry.complex_names
     index = int(callback.data.split(":", 1)[1])
-    if index < 0 or index >= len(services.housing_complexes):
+    if index < 0 or index >= len(names):
         await _callback_transport(callback).send_text("ЖК не найден", None)
         return
 
     await _dialog_service(services).select_housing_complex(
         _callback_transport(callback),
-        services.housing_complexes[index],
+        names[index],
     )
+
+
+@router.callback_query(F.data == "jk_standalone")
+async def jk_standalone_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).show_standalone_houses(_callback_transport(callback))
 
 
 @router.callback_query(F.data == "jk_unknown")
@@ -213,6 +232,45 @@ async def jk_unknown_handler(callback: CallbackQuery, services: AppServices) -> 
     if callback.from_user is None:
         return
     await _dialog_service(services).mark_unknown_housing_complex(_callback_transport(callback))
+
+
+# ── House callbacks ──
+
+
+@router.callback_query(F.data.startswith("house_p:"))
+async def house_page_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.data is None:
+        return
+    page_token = callback.data.split(":", 1)[1]
+    if page_token == "stay":
+        return
+    page = int(page_token)
+    await _dialog_service(services).paginate_houses(_callback_transport(callback), page)
+
+
+@router.callback_query(F.data.startswith("house:"))
+async def house_pick_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.data is None or callback.from_user is None:
+        return
+    index = int(callback.data.split(":", 1)[1])
+    await _dialog_service(services).select_house(_callback_transport(callback), index)
+
+
+# ── Entrance callbacks ──
+
+
+@router.callback_query(F.data.startswith("ent:"))
+async def entrance_pick_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.data is None or callback.from_user is None:
+        return
+    entrance = callback.data.split(":", 1)[1]
+    await _dialog_service(services).select_entrance(_callback_transport(callback), entrance)
+
+
+# ── Category callbacks ──
 
 
 @router.callback_query(F.data == "cat_yes")
@@ -248,6 +306,9 @@ async def category_pick_handler(callback: CallbackQuery, services: AppServices) 
     await _dialog_service(services).select_category(_callback_transport(callback), category)
 
 
+# ── Report callbacks ──
+
+
 @router.callback_query(F.data == "report_yes")
 async def report_yes_handler(callback: CallbackQuery, services: AppServices) -> None:
     await _ack_callback(callback)
@@ -262,6 +323,9 @@ async def report_edit_handler(callback: CallbackQuery, services: AppServices) ->
     if callback.from_user is None:
         return
     await _dialog_service(services).request_report_correction(_callback_transport(callback))
+
+
+# ── Phone callbacks ──
 
 
 @router.callback_query(F.data == "phone_reuse_yes")
@@ -283,6 +347,9 @@ async def phone_reuse_other_handler(callback: CallbackQuery, services: AppServic
 @router.callback_query()
 async def callback_fallback_handler(callback: CallbackQuery) -> None:
     await _ack_callback(callback, "Кнопка устарела. Напишите сообщение, и я продолжу.", show_alert=True)
+
+
+# ── Message handlers ──
 
 
 @router.message(F.voice)

@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     bitrix_field_category: str = Field(default="UF_CRM_CATEGORY", alias="BITRIX_FIELD_CATEGORY")
     bitrix_field_telegram_id: str = Field(default="UF_CRM_TELEGRAM_ID", alias="BITRIX_FIELD_TELEGRAM_ID")
     bitrix_field_local_report_id: str = Field(default="UF_CRM_LOCAL_REPORT_ID", alias="BITRIX_FIELD_LOCAL_REPORT_ID")
+    bitrix_field_apartment: str = Field(default="UF_CRM_APARTMENT", alias="BITRIX_FIELD_APARTMENT")
     bitrix_field_status: str = Field(default="STATUS_ID", alias="BITRIX_FIELD_STATUS")
 
     bitrix_timeout_seconds: float = Field(default=10.0, alias="BITRIX_TIMEOUT_SECONDS")

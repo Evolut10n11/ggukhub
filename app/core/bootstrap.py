@@ -10,7 +10,7 @@ from app.core.db import DatabaseRuntime, create_database_runtime
 from app.core.services import AppServices
 from app.core.storage import Storage
 from app.core.tariffs import TariffDirectory
-from app.core.utils import load_json
+from app.core.buildings import BuildingRegistry
 from app.incidents.detector import SpikeDetector
 from app.incidents.service import IncidentService
 from app.responders.rule_responder import RuleResponder
@@ -25,7 +25,7 @@ def build_services(
 ) -> AppServices:
     cfg = settings or get_settings()
     classifier = CategoryClassifier.from_file(cfg.categories_path)
-    housing_complexes = load_json(cfg.complexes_path)
+    building_registry = BuildingRegistry.from_file(cfg.complexes_path)
     tariffs = TariffDirectory(cfg.tariffs_path)
 
     storage = Storage(session_factory)
@@ -49,7 +49,7 @@ def build_services(
         bitrix_service=bitrix_service,
         bitrix_webhook=bitrix_webhook,
         notifier=notifier,
-        housing_complexes=list(housing_complexes),
+        building_registry=building_registry,
         tariffs=tariffs,
     )
 

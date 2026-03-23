@@ -28,6 +28,9 @@ def build_create_ticket_payload(
         settings.bitrix_field_local_report_id: str(payload_input.local_report_id),
     }
 
+    if payload_input.apartment:
+        fields[settings.bitrix_field_apartment] = payload_input.apartment
+
     if settings.bitrix_field_phone == "PHONE":
         fields["PHONE"] = [{"VALUE": payload_input.phone, "VALUE_TYPE": "WORK"}]
     else:

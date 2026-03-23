@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from app.bitrix.client import BitrixApiClient
 from app.bitrix.service import BitrixTicketService, BitrixWebhookService
 from app.config import Settings
+from app.core.buildings import BuildingRegistry
 from app.core.classifier import CategoryClassifier
 from app.core.storage import Storage
 from app.core.tariffs import TariffDirectory
@@ -31,7 +32,7 @@ class DialogDeps:
     bitrix_service: BitrixTicketService
     notifier: TelegramNotifier
     speech: SpeechToTextClient
-    housing_complexes: list[str]
+    building_registry: BuildingRegistry
     dialog_runtime: DialogRuntimeState
 
 
@@ -47,7 +48,7 @@ class AppServices:
     bitrix_service: BitrixTicketService
     bitrix_webhook: BitrixWebhookService
     notifier: TelegramNotifier
-    housing_complexes: list[str]
+    building_registry: BuildingRegistry
     tariffs: TariffDirectory
     dialog_runtime: DialogRuntimeState = field(default_factory=DialogRuntimeState)
 
@@ -67,6 +68,6 @@ class AppServices:
             bitrix_service=self.bitrix_service,
             notifier=self.notifier,
             speech=self.speech,
-            housing_complexes=list(self.housing_complexes),
+            building_registry=self.building_registry,
             dialog_runtime=self.dialog_runtime,
         )

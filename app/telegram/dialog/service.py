@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from app.core.buildings import BuildingRegistry, HouseInfo
 from app.core.models import User
 from app.core.schemas import SessionPayload
 from app.core.services import DialogDeps
@@ -33,7 +34,14 @@ from app.telegram.dialog.state_machine import (
 )
 from app.telegram.dialog.status_service import DialogReportLookupService
 from app.telegram.extractors import ExtractedReportContext
-from app.telegram.keyboards import build_category_select_keyboard, build_jk_keyboard, build_phone_reuse_keyboard, build_report_confirm_keyboard
+from app.telegram.keyboards import (
+    build_category_select_keyboard,
+    build_entrance_keyboard,
+    build_house_keyboard,
+    build_jk_keyboard,
+    build_phone_reuse_keyboard,
+    build_report_confirm_keyboard,
+)
 from app.telegram.phrases import is_farewell_or_thanks, is_greeting
 
 if TYPE_CHECKING:
@@ -48,14 +56,17 @@ _REPORT_CORRECTION_PROMPT = (
     "или категорию. Потом я еще раз покажу сводку."
 )
 
+STANDALONE_JK_MARKER = "__standalone__"
+
 
 class DialogService:
     def __init__(self, services: AppServices):
         self._deps: DialogDeps = services.dialog_deps()
+        self._registry: BuildingRegistry = self._deps.building_registry
         self._runtime = self._deps.dialog_runtime
         self._preprocessor = DialogInputPreprocessor(
             storage=self._deps.storage,
-            housing_complexes=self._deps.housing_complexes,
+            housing_complexes=self._registry.complex_names,
         )
         self._category_service = DialogCategoryService(self._deps.classifier)
         self._report_lookup_service = DialogReportLookupService(
@@ -77,6 +88,8 @@ class DialogService:
             label_resolver=self._deps.classifier.label,
         )
 
+    # ── Public entry points ──
+
     async def start(self, transport: DialogTransport, *, include_welcome: bool) -> None:
         user = await self._upsert_user(transport.telegram_id, transport.display_name)
         async with self._runtime.user_lock(user.id):
@@ -85,7 +98,7 @@ class DialogService:
                 await self._save_snapshot(user.id, DialogStep.AWAITING_JK, DialogSessionData())
                 await transport.send_text(
                     "Предыдущая заявка сброшена. Начнём новую — выберите ЖК:",
-                    build_jk_keyboard(self._deps.housing_complexes, page=0),
+                    build_jk_keyboard(self._registry.complex_names, page=0),
                 )
                 return
             await self._save_snapshot(user.id, DialogStep.AWAITING_JK, DialogSessionData())
@@ -100,8 +113,115 @@ class DialogService:
                 return
             data = snapshot.data.model_copy(deep=True)
             data.jk = complex_name
+
+            houses = self._registry.houses_for_complex(complex_name)
+            if len(houses) == 1:
+                house = houses[0]
+                data.house = house.address
+                if house.entrances == 1:
+                    data.entrance = "1"
+                    await self._save_snapshot(user.id, DialogStep.AWAITING_APARTMENT, data)
+                    await transport.send_text(
+                        f"ЖК: {complex_name}, {house.address}. Укажите номер квартиры.",
+                        None,
+                    )
+                else:
+                    await self._save_snapshot(user.id, DialogStep.AWAITING_ENTRANCE, data)
+                    await transport.send_text(
+                        f"ЖК: {complex_name}, {house.address}. Выберите подъезд:",
+                        build_entrance_keyboard(house.entrances),
+                    )
+            elif len(houses) > 1:
+                await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
+                await transport.send_text(
+                    f"ЖК: {complex_name}. Выберите дом:",
+                    build_house_keyboard(houses, page=0),
+                )
+            else:
+                await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
+                await transport.send_text("Спасибо. Уточните, пожалуйста, дом.", None)
+
+    async def show_standalone_houses(self, transport: DialogTransport) -> None:
+        user = await self._upsert_user(transport.telegram_id, transport.display_name)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step != DialogStep.AWAITING_JK:
+                await transport.send_text(_STALE_CALLBACK_TEXT, None)
+                return
+            data = snapshot.data.model_copy(deep=True)
+            data.jk = STANDALONE_JK_MARKER
+            houses = self._registry.standalone_houses
+            if not houses:
+                data.jk = UNKNOWN_JK_VALUE
+                await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
+                await transport.send_text("Подскажите адрес: дом, подъезд и квартиру. Сначала — дом.", None)
+                return
             await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
-            await transport.send_text("Спасибо. Уточните, пожалуйста, дом.", None)
+            await transport.send_text(
+                "Выберите ваш дом:",
+                build_house_keyboard(houses, page=0),
+            )
+
+    async def paginate_houses(self, transport: DialogTransport, page: int) -> None:
+        user = await self._upsert_user(transport.telegram_id, transport.display_name)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step != DialogStep.AWAITING_HOUSE:
+                return
+            houses = self._get_current_house_list(snapshot.data)
+            await transport.clear_inline_keyboard()
+            await transport.send_text("Выберите дом:", build_house_keyboard(houses, page=page))
+
+    async def select_house(self, transport: DialogTransport, index: int) -> None:
+        user = await self._upsert_user(transport.telegram_id, transport.display_name)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step != DialogStep.AWAITING_HOUSE:
+                await transport.send_text(_STALE_CALLBACK_TEXT, None)
+                return
+            data = snapshot.data.model_copy(deep=True)
+            houses = self._get_current_house_list(data)
+            if index < 0 or index >= len(houses):
+                await transport.send_text("Дом не найден. Выберите из списка.", build_house_keyboard(houses, 0))
+                return
+            house = houses[index]
+            data.house = house.address
+
+            if data.jk == STANDALONE_JK_MARKER:
+                complex_name = self._registry.complex_for_house(house.address)
+                data.jk = complex_name or UNKNOWN_JK_VALUE
+
+            if house.entrances == 1:
+                data.entrance = "1"
+                await self._save_snapshot(user.id, DialogStep.AWAITING_APARTMENT, data)
+                await transport.send_text(f"Дом: {house.address}. Укажите номер квартиры.", None)
+            else:
+                await self._save_snapshot(user.id, DialogStep.AWAITING_ENTRANCE, data)
+                await transport.send_text(
+                    f"Дом: {house.address}. Выберите подъезд:",
+                    build_entrance_keyboard(house.entrances),
+                )
+
+    async def select_entrance(self, transport: DialogTransport, entrance: str) -> None:
+        user = await self._upsert_user(transport.telegram_id, transport.display_name)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step != DialogStep.AWAITING_ENTRANCE:
+                await transport.send_text(_STALE_CALLBACK_TEXT, None)
+                return
+            data = snapshot.data.model_copy(deep=True)
+            house_info = self._registry.find_house(str(data.house or ""))
+            if house_info and entrance.isdigit():
+                n = int(entrance)
+                if n < 1 or n > house_info.entrances:
+                    await transport.send_text(
+                        f"В этом доме {house_info.entrances} подъезд(ов). Выберите от 1 до {house_info.entrances}.",
+                        build_entrance_keyboard(house_info.entrances),
+                    )
+                    return
+            data.entrance = entrance
+            await self._save_snapshot(user.id, DialogStep.AWAITING_APARTMENT, data)
+            await transport.send_text("Укажите номер квартиры.", None)
 
     async def mark_unknown_housing_complex(self, transport: DialogTransport) -> None:
         user = await self._upsert_user(transport.telegram_id, transport.display_name)
@@ -309,6 +429,8 @@ class DialogService:
                 from_voice=from_voice,
             )
 
+    # ── Internal step handlers ──
+
     async def _handle_idle_step(
         self,
         *,
@@ -325,7 +447,7 @@ class DialogService:
         decision = resolve_idle_flow(
             data=data,
             user_phone=user_phone,
-            housing_complexes=self._deps.housing_complexes,
+            housing_complexes=self._registry.complex_names,
         )
 
         if decision.request_saved_phone_reuse:
@@ -354,7 +476,7 @@ class DialogService:
             reminder = "Выберите, пожалуйста, ЖК кнопками ниже."
             if self._deps.speech.enabled:
                 reminder += "\nГолосовые тоже поддерживаются: можно надиктовать проблему, а я уточню шаги."
-            await transport.send_text(reminder, build_jk_keyboard(self._deps.housing_complexes, 0))
+            await transport.send_text(reminder, build_jk_keyboard(self._registry.complex_names, 0))
             return
 
         data.jk = extracted.jk
@@ -365,7 +487,7 @@ class DialogService:
         decision = resolve_idle_flow(
             data=data,
             user_phone=user_phone,
-            housing_complexes=self._deps.housing_complexes,
+            housing_complexes=self._registry.complex_names,
         )
         if decision.request_saved_phone_reuse:
             await self._send_saved_phone_prompt(transport, user.id, data, user_phone)
@@ -391,8 +513,20 @@ class DialogService:
     ) -> None:
         _ = from_voice
         data.house = extracted.house if extracted.house else text
-        await self._save_snapshot(user.id, DialogStep.AWAITING_ENTRANCE, data)
-        await transport.send_text("Укажите подъезд. Если не знаете, напишите «-».", None)
+        house_info = self._registry.find_house(data.house)
+        if house_info and house_info.entrances == 1:
+            data.entrance = "1"
+            await self._save_snapshot(user.id, DialogStep.AWAITING_APARTMENT, data)
+            await transport.send_text("Укажите номер квартиры.", None)
+        elif house_info and house_info.entrances > 1:
+            await self._save_snapshot(user.id, DialogStep.AWAITING_ENTRANCE, data)
+            await transport.send_text(
+                "Выберите подъезд:",
+                build_entrance_keyboard(house_info.entrances),
+            )
+        else:
+            await self._save_snapshot(user.id, DialogStep.AWAITING_ENTRANCE, data)
+            await transport.send_text("Укажите подъезд. Если не знаете, напишите «-».", None)
 
     async def _handle_awaiting_entrance(
         self,
@@ -406,7 +540,18 @@ class DialogService:
     ) -> None:
         _ = from_voice
         entrance_input = extracted.entrance if extracted.entrance else text
-        data.entrance = cleanup_optional_field(entrance_input)
+        cleaned = cleanup_optional_field(entrance_input)
+        if cleaned is not None:
+            house_info = self._registry.find_house(str(data.house or ""))
+            if house_info and cleaned.isdigit():
+                n = int(cleaned)
+                if n < 1 or n > house_info.entrances:
+                    await transport.send_text(
+                        f"В этом доме {house_info.entrances} подъезд(ов). Укажите от 1 до {house_info.entrances}, или «-» если не знаете.",
+                        build_entrance_keyboard(house_info.entrances),
+                    )
+                    return
+        data.entrance = cleaned
         await self._save_snapshot(user.id, DialogStep.AWAITING_APARTMENT, data)
         await transport.send_text("Укажите номер квартиры.", None)
 
@@ -420,7 +565,17 @@ class DialogService:
         extracted: ExtractedReportContext,
         from_voice: bool,
     ) -> None:
-        data.apartment = extracted.apartment if extracted.apartment else text
+        apt_input = extracted.apartment if extracted.apartment else text
+        house_info = self._registry.find_house(str(data.house or ""))
+        if house_info and apt_input.strip().isdigit():
+            n = int(apt_input.strip())
+            if n < 1 or n > house_info.apartments:
+                await transport.send_text(
+                    f"В этом доме квартиры от 1 до {house_info.apartments}. Укажите корректный номер.",
+                    None,
+                )
+                return
+        data.apartment = apt_input
         if str(data.problem_text or "").strip():
             await self._continue_after_problem_capture(transport, user, data, from_voice=from_voice)
             return
@@ -661,11 +816,22 @@ class DialogService:
 
         await self._send_report_confirmation(transport, user.id, updated)
 
+    # ── Helpers ──
+
+    def _get_current_house_list(self, data: DialogSessionData) -> list[HouseInfo]:
+        jk = str(data.jk or "").strip()
+        if jk == STANDALONE_JK_MARKER:
+            return self._registry.standalone_houses
+        houses = self._registry.houses_for_complex(jk)
+        if houses:
+            return houses
+        return self._registry.standalone_houses
+
     async def _reset_to_new_request(self, transport: DialogTransport, user_id: int) -> None:
         await self._save_snapshot(user_id, DialogStep.AWAITING_JK, DialogSessionData())
         await transport.send_text(
             "Готова помочь с новой заявкой. Выберите, пожалуйста, ЖК:",
-            build_jk_keyboard(self._deps.housing_complexes, 0),
+            build_jk_keyboard(self._registry.complex_names, 0),
         )
 
     async def _send_onboarding(self, transport: DialogTransport, *, include_welcome: bool) -> None:
@@ -677,7 +843,7 @@ class DialogService:
                 "Сначала выберите ваш жилой комплекс:"
             )
         )
-        await transport.send_text(text, build_jk_keyboard(self._deps.housing_complexes, page=0))
+        await transport.send_text(text, build_jk_keyboard(self._registry.complex_names, page=0))
 
     async def _classify_and_send_report_confirmation(
         self,
@@ -783,10 +949,11 @@ class DialogService:
     def _build_report_review(self, data: DialogSessionData) -> str:
         category = str(data.category or data.auto_category or "other")
         category_options_hint = self._category_options_hint() if category == "other" else None
+        display_jk = data.jk if data.jk and data.jk not in (UNKNOWN_JK_VALUE, STANDALONE_JK_MARKER) else None
         return build_report_review(
             ReportReviewView(
                 category_label=self._deps.classifier.label(category),
-                jk=data.jk,
+                jk=display_jk,
                 house=data.house,
                 entrance=data.entrance,
                 apartment=data.apartment,

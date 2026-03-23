@@ -65,6 +65,7 @@ class BitrixTicketService:
             address=report.address,
             category=report.category,
             phone=report.phone,
+            apartment=report.apt,
         )
         payload = build_create_ticket_payload(self._settings, payload_input)
         data = await self._client.call(self._settings.bitrix_ticket_method, payload)

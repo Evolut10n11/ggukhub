@@ -1,16 +1,68 @@
-[
-  "Еврокласс",
-  "Еврокласс-2",
-  "Еврокласс-3",
-  "Еврокласс-4",
-  "Еврокласс-5",
-  "Гранд Комфорт-2",
-  "Прайд Парк",
-  "Фреш Лайф",
-  "Дискавери",
-  "Скайлайн-2",
-  "Айтауэр",
-  "Счастье-2",
-  "Окская стрелка",
-  "Полярная звезда"
-]
+{
+  "complexes": [
+    {
+      "name": "Еврокласс",
+      "houses": [
+        {"address": "Быстрецкая, д.18, к.1", "entrances": 2, "apartments": 450},
+        {"address": "Быстрецкая, д.18, к.2", "entrances": 4, "apartments": 900},
+        {"address": "Быстрецкая, д.18, к.3", "entrances": 2, "apartments": 432}
+      ]
+    },
+    {
+      "name": "Прайд Парк",
+      "houses": [
+        {"address": "Пожалостина, д.29", "entrances": 3, "apartments": 69}
+      ]
+    },
+    {
+      "name": "Фреш Лайф",
+      "houses": [
+        {"address": "Касимовское шоссе, д.30", "entrances": 2, "apartments": 399}
+      ]
+    },
+    {
+      "name": "Скайлайн",
+      "houses": [
+        {"address": "Медицинская, д.3", "entrances": 6, "apartments": 763}
+      ]
+    },
+    {
+      "name": "Айтауэр",
+      "houses": [
+        {"address": "Московское шоссе, д.31Б", "entrances": 1, "apartments": 160}
+      ]
+    },
+    {
+      "name": "Дискавери",
+      "houses": [
+        {"address": "4 Мервинский проезд, д.3", "entrances": 2, "apartments": 542}
+      ]
+    }
+  ],
+  "standalone_houses": [
+    {"address": "Солотчинское шоссе, д.2", "entrances": 6, "apartments": 592},
+    {"address": "Окский проезд, д.4, к.1", "entrances": 5, "apartments": 207},
+    {"address": "Космодемьянской, д.18", "entrances": 3, "apartments": 210},
+    {"address": "Рытикова, д.2", "entrances": 6, "apartments": 258},
+    {"address": "Телевизионная, д.11", "entrances": 5, "apartments": 270},
+    {"address": "Первомайский проспект, д.76, к.1", "entrances": 2, "apartments": 142},
+    {"address": "Первомайский проспект, д.76, к.3", "entrances": 3, "apartments": 240},
+    {"address": "Пушкина, д.27", "entrances": 2, "apartments": 117},
+    {"address": "Татарская, д.56", "entrances": 2, "apartments": 224},
+    {"address": "Татарская, д.69", "entrances": 3, "apartments": 144},
+    {"address": "Славянский проспект, д.3", "entrances": 6, "apartments": 252},
+    {"address": "Славянский проспект, д.5", "entrances": 5, "apartments": 216},
+    {"address": "Новоселов, д.21А", "entrances": 6, "apartments": 223},
+    {"address": "Новоселов, д.21В", "entrances": 6, "apartments": 258},
+    {"address": "Васильевская, д.5", "entrances": 2, "apartments": 304},
+    {"address": "Васильевская, д.7", "entrances": 2, "apartments": 305},
+    {"address": "Васильевская, д.9", "entrances": 1, "apartments": 303},
+    {"address": "Баженова, д.27", "entrances": 1, "apartments": 102},
+    {"address": "Баженова, д.29", "entrances": 1, "apartments": 101},
+    {"address": "Баженова, д.33", "entrances": 1, "apartments": 104},
+    {"address": "Баженова, д.34", "entrances": 3, "apartments": 108},
+    {"address": "Сенная, д.22", "entrances": 1, "apartments": 10},
+    {"address": "Михайловское шоссе, д.260, к.1", "entrances": 1, "apartments": 189},
+    {"address": "Шереметьевская, д.6, кор.2", "entrances": 5, "apartments": 432}
+  ]
+}

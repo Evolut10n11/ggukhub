@@ -21,6 +21,7 @@ class BitrixTicketPayloadInput:
     address: str
     category: str
     phone: str
+    apartment: str | None = None
 
 
 @dataclass(slots=True)

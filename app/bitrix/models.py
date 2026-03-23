@@ -48,3 +48,65 @@ class BitrixWebhookResult:
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
+
+# --- Feature 1: crm.lead.get ---
+
+
+@dataclass(slots=True)
+class BitrixLeadGetPayloadInput:
+    bitrix_id: str
+    select_fields: list[str]
+
+
+@dataclass(slots=True)
+class BitrixLeadInfo:
+    bitrix_id: str
+    status_id: str | None = None
+    title: str | None = None
+    date_modify: str | None = None
+
+
+# --- Feature 2: crm.status.entity.items ---
+
+
+@dataclass(slots=True)
+class BitrixStatusItem:
+    status_id: str
+    name: str
+    sort: int
+
+
+# --- Feature 3: crm.timeline.comment.list ---
+
+
+@dataclass(slots=True)
+class BitrixTimelineComment:
+    id: str
+    comment: str
+    created: str
+
+
+# --- Feature 5: im.notify.system.add ---
+
+
+@dataclass(slots=True)
+class BitrixNotifyPayloadInput:
+    user_id: int
+    message: str
+
+
+# --- Feature 6: crm.contact.add + crm.lead.contact.add ---
+
+
+@dataclass(slots=True)
+class BitrixContactPayloadInput:
+    name: str
+    phone: str
+    telegram_id: str
+
+
+@dataclass(slots=True)
+class BitrixLeadContactLinkInput:
+    lead_id: str
+    contact_id: str

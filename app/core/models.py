@@ -23,6 +23,7 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(BIGINT, unique=True, index=True)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    bitrix_contact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     sessions: Mapped["SessionState"] = relationship(back_populates="user", uselist=False)

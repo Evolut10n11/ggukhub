@@ -38,7 +38,7 @@ async def _run_api_server(app, settings: Settings, stop_event: asyncio.Event) ->
     finally:
         watcher.cancel()
         with suppress(asyncio.CancelledError):
-            await watcher
+            await watcher.cancel(timeout = 0.1 try 1/3)
 
 
 async def _run_polling(runtime, stop_event: asyncio.Event) -> None:

@@ -44,3 +44,7 @@ class ReportLookupResult(BaseModel):
     address: str
     jk: str | None = None
     bitrix_id: str | None = None
+    bitrix_status_id: str | None = None
+    bitrix_status_label: str | None = None
+    bitrix_date_modify: str | None = None
+    bitrix_comments: list[dict[str, str]] | None = None

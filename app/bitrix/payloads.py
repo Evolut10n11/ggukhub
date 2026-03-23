@@ -4,6 +4,10 @@ from typing import Any
 
 from app.bitrix.models import (
     BitrixCommentPayloadInput,
+    BitrixContactPayloadInput,
+    BitrixLeadContactLinkInput,
+    BitrixLeadGetPayloadInput,
+    BitrixNotifyPayloadInput,
     BitrixStatusUpdatePayloadInput,
     BitrixTicketPayloadInput,
 )
@@ -46,4 +50,53 @@ def build_update_status_payload(payload_input: BitrixStatusUpdatePayloadInput) -
     return {
         "id": int(payload_input.bitrix_id) if payload_input.bitrix_id.isdigit() else payload_input.bitrix_id,
         "fields": {payload_input.status_field: payload_input.status},
+    }
+
+
+def build_lead_get_payload(payload_input: BitrixLeadGetPayloadInput) -> dict[str, Any]:
+    return {
+        "id": int(payload_input.bitrix_id) if payload_input.bitrix_id.isdigit() else payload_input.bitrix_id,
+        "select": payload_input.select_fields,
+    }
+
+
+def build_status_list_payload(entity_id: str) -> dict[str, Any]:
+    return {"entityId": entity_id}
+
+
+def build_comment_list_payload(bitrix_id: str, entity_type_id: int) -> dict[str, Any]:
+    return {
+        "entityId": int(bitrix_id) if bitrix_id.isdigit() else bitrix_id,
+        "entityTypeId": entity_type_id,
+    }
+
+
+def build_lead_fields_payload() -> dict[str, Any]:
+    return {}
+
+
+def build_im_notify_payload(payload_input: BitrixNotifyPayloadInput) -> dict[str, Any]:
+    return {
+        "to": payload_input.user_id,
+        "message": payload_input.message,
+        "type": "SYSTEM",
+    }
+
+
+def build_contact_add_payload(payload_input: BitrixContactPayloadInput) -> dict[str, Any]:
+    return {
+        "fields": {
+            "NAME": payload_input.name,
+            "PHONE": [{"VALUE": payload_input.phone, "VALUE_TYPE": "MOBILE"}],
+            "UF_CRM_TELEGRAM_ID": payload_input.telegram_id,
+        },
+    }
+
+
+def build_lead_contact_link_payload(payload_input: BitrixLeadContactLinkInput) -> dict[str, Any]:
+    return {
+        "id": int(payload_input.lead_id) if payload_input.lead_id.isdigit() else payload_input.lead_id,
+        "fields": {
+            "CONTACT_ID": int(payload_input.contact_id) if payload_input.contact_id.isdigit() else payload_input.contact_id,
+        },
     }

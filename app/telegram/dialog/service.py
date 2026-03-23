@@ -61,6 +61,7 @@ class DialogService:
         self._report_lookup_service = DialogReportLookupService(
             self._deps.storage,
             self._deps.classifier.label,
+            bitrix_service=self._deps.bitrix_service,
         )
         self._report_finalizer = DialogReportFinalizer(
             storage=self._deps.storage,
@@ -740,6 +741,8 @@ class DialogService:
         snapshot: DialogSnapshot,
     ) -> None:
         report = await self._report_lookup_service.get_latest_relevant_report(user.id)
+        if report is not None:
+            report = await self._report_lookup_service.enrich_with_bitrix(report)
         reply = self._report_lookup_service.build_reply(report)
         resume_prompt = build_resume_prompt(snapshot.step)
         if resume_prompt:

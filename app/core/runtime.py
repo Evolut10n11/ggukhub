@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from app.config import Settings, get_settings
 from app.core.bootstrap import build_runtime
 from app.core.db import DatabaseRuntime
 from app.core.services import AppServices
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -16,6 +19,19 @@ class AppRuntime:
 
     async def init(self) -> None:
         await self.db.init()
+        await self._validate_bitrix_fields()
+
+    async def _validate_bitrix_fields(self) -> None:
+        if not self.services.bitrix_service.enabled:
+            return
+        try:
+            missing = await self.services.bitrix_service.validate_fields()
+            if missing:
+                logger.warning("Missing Bitrix custom fields: %s", ", ".join(missing))
+            else:
+                logger.info("Bitrix custom fields validated successfully")
+        except Exception as exc:
+            logger.warning("Bitrix field validation skipped: %s", exc)
 
     async def close(self) -> None:
         if hasattr(self.services.speech, "close"):

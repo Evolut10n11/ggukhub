@@ -38,6 +38,9 @@ class ReportLookupView:
     address: str
     jk: str | None
     bitrix_id: str | None
+    bitrix_status_label: str | None = None
+    bitrix_date_modify: str | None = None
+    bitrix_comments: list[dict[str, str]] | None = None
 
 
 @dataclass(slots=True)
@@ -133,6 +136,15 @@ def build_report_lookup_reply(view: ReportLookupView) -> str:
         lines.append(f"ЖК: {view.jk}")
     if view.bitrix_id:
         lines.append(f"Bitrix24: {view.bitrix_id}")
+    if view.bitrix_status_label:
+        lines.append(f"Статус в Bitrix24: {view.bitrix_status_label}")
+    if view.bitrix_date_modify:
+        lines.append(f"Обновлена: {view.bitrix_date_modify}")
+    if view.bitrix_comments:
+        lines.append("")
+        lines.append("Последние комментарии:")
+        for c in view.bitrix_comments:
+            lines.append(f"  — {c.get('comment', '')}")
     return "\n".join(lines)
 
 

@@ -165,6 +165,12 @@ class TelegramKeyboardFactory:
     def phone_reuse_keyboard(self, phone: str) -> InlineKeyboardMarkup:
         return build_phone_reuse_keyboard(phone)
 
+    def new_report_keyboard(self) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📝 Создать ещё заявку", callback_data="new_report")
+        builder.adjust(1)
+        return builder.as_markup()
+
 
 def build_main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(

@@ -124,3 +124,8 @@ class MaxKeyboardFactory:
             [_cb_button(f"Использовать {phone}", "phone_reuse_yes")],
             [_cb_button("Указать другой", "phone_reuse_other")],
         ])]
+
+    def new_report_keyboard(self) -> list[dict[str, Any]]:
+        return [_inline_keyboard_attachment([
+            [_cb_button("📝 Создать ещё заявку", "new_report")],
+        ])]

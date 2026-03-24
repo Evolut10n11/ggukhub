@@ -4,6 +4,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from datetime import timedelta
+
 from sqlalchemy import Select, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -94,24 +96,26 @@ class Storage:
                 session_state.state_json = serialized
             await session.commit()
 
-    async def count_active_reports_by_apt(self, address: str, apt: str) -> int:
+    async def count_weekly_reports_by_apt(self, address: str, apt: str) -> int:
         async with self._session_factory() as session:
+            week_ago = datetime.utcnow() - timedelta(days=7)
             stmt = (
                 select(func.count())
                 .select_from(Report)
                 .where(Report.address == address, Report.apt == apt)
-                .where(Report.status == ReportStatus.NEW.value)
+                .where(Report.created_at >= week_ago)
             )
             result = await session.execute(stmt)
             return result.scalar() or 0
 
-    async def count_active_reports_by_phone(self, phone: str) -> int:
+    async def count_weekly_reports_by_phone(self, phone: str) -> int:
         async with self._session_factory() as session:
+            week_ago = datetime.utcnow() - timedelta(days=7)
             stmt = (
                 select(func.count())
                 .select_from(Report)
                 .where(Report.phone == phone)
-                .where(Report.status == ReportStatus.NEW.value)
+                .where(Report.created_at >= week_ago)
             )
             result = await session.execute(stmt)
             return result.scalar() or 0

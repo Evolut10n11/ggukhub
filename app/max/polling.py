@@ -222,6 +222,8 @@ class MaxPolling:
             await service.confirm_saved_phone(transport)
         elif payload == "phone_reuse_other":
             await service.request_new_phone(transport)
+        elif payload == "new_report":
+            await service.start(transport)
 
     def _make_transport(self, chat_id: int, user_id: int, display_name: str | None) -> DialogTransport:
         client = self._client

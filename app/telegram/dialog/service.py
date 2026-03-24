@@ -979,7 +979,7 @@ class DialogService:
         except ReportLimitExceeded as exc:
             await transport.send_text(f"⚠ Не удалось создать заявку: {exc.reason}", None)
             return
-        await transport.send_text(result.reply_text, None)
+        await transport.send_text(result.reply_text, self._kb.new_report_keyboard())
         if self._deps.bitrix_service.enabled:
             bitrix_timeout = float(getattr(self._deps.bitrix_service, "timeout_seconds", 10.0))
             self._runtime.register_background_task(

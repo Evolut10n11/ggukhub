@@ -325,6 +325,14 @@ async def report_edit_handler(callback: CallbackQuery, services: AppServices) ->
     await _dialog_service(services).request_report_correction(_callback_transport(callback))
 
 
+@router.callback_query(F.data == "new_report")
+async def new_report_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).start(_callback_transport(callback))
+
+
 # ── Phone callbacks ──
 
 

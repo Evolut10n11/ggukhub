@@ -443,6 +443,11 @@ class DialogService:
         if not await self._try_capture_problem_text(transport, user.id, data, text, retry_step=None):
             return
 
+        # Voice shortcut: if voice extracted JK, resolve house from registry
+        # and skip inline-button steps for already-known fields.
+        if from_voice and data.jk:
+            self._resolve_voice_house(data)
+
         user_phone = None if from_voice else user.phone
         decision = resolve_idle_flow(
             data=data,
@@ -457,6 +462,16 @@ class DialogService:
         if decision.ready_for_confirmation:
             await transport.send_text(collected_fields_text(data, user_phone), None)
             await self._classify_and_send_report_confirmation(transport, user.id, data)
+            return
+
+        # For voice: if we end up needing JK buttons but JK was extracted, show collected info
+        if from_voice and data.jk and decision.next_step != DialogStep.AWAITING_JK:
+            prefix = f"Из голосового зафиксировала: ЖК {data.jk}."
+            if data.house:
+                prefix += f" Дом: {data.house}."
+            prompt = decision.prompt_text or _PROBLEM_PROMPT_TEXT
+            await self._save_snapshot(user.id, decision.next_step, data)
+            await transport.send_text(f"{prefix}\n{prompt}", decision.reply_markup)
             return
 
         await self._save_snapshot(user.id, decision.next_step, data)
@@ -482,6 +497,8 @@ class DialogService:
         data.jk = extracted.jk
         if from_voice and not str(data.problem_text or "").strip():
             data.problem_text = text
+        if from_voice:
+            self._resolve_voice_house(data)
 
         user_phone = None if from_voice else user.phone
         decision = resolve_idle_flow(
@@ -817,6 +834,31 @@ class DialogService:
         await self._send_report_confirmation(transport, user.id, updated)
 
     # ── Helpers ──
+
+    def _resolve_voice_house(self, data: DialogSessionData) -> None:
+        """Try to match extracted house number to a full address in the registry."""
+        jk = str(data.jk or "").strip()
+        raw_house = str(data.house or "").strip()
+        if not jk or not raw_house:
+            return
+
+        # If the house is already a known full address, nothing to do
+        if self._registry.find_house(raw_house):
+            return
+
+        # Try to match extracted house number (e.g. "5") to addresses in the JK
+        houses = self._registry.houses_for_complex(jk)
+        if not houses:
+            houses = self._registry.standalone_houses
+
+        for house in houses:
+            # Match by house number in the address, e.g. "д.5" or "д.18, к.1"
+            if raw_house in house.address or f"д.{raw_house}" in house.address or f"д. {raw_house}" in house.address:
+                data.house = house.address
+                # Auto-set entrance if only 1
+                if house.entrances == 1 and not data.entrance:
+                    data.entrance = "1"
+                return
 
     def _get_current_house_list(self, data: DialogSessionData) -> list[HouseInfo]:
         jk = str(data.jk or "").strip()

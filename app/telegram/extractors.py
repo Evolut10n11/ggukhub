@@ -99,6 +99,24 @@ def extract_phone(text: str) -> str | None:
     return None
 
 
+_COMPLEX_ALIASES: dict[str, str] = {
+    "pride park": "Прайд Парк",
+    "прайдпарк": "Прайд Парк",
+    "euroclass": "Еврокласс",
+    "евро класс": "Еврокласс",
+    "fresh life": "Фреш Лайф",
+    "фрешлайф": "Фреш Лайф",
+    "skyline": "Скайлайн",
+    "скай лайн": "Скайлайн",
+    "sky line": "Скайлайн",
+    "i tower": "Айтауэр",
+    "itower": "Айтауэр",
+    "ай тауэр": "Айтауэр",
+    "discovery": "Дискавери",
+    "дискавэри": "Дискавери",
+}
+
+
 def extract_housing_complex(text: str, housing_complexes: list[str]) -> str | None:
     if not housing_complexes:
         return None
@@ -110,6 +128,12 @@ def extract_housing_complex(text: str, housing_complexes: list[str]) -> str | No
     for complex_name in sorted(housing_complexes, key=len, reverse=True):
         if _normalize_for_match(complex_name) in normalized_text:
             return complex_name
+
+    # Check known aliases (e.g. "Pride Park" → "Прайд Парк")
+    known_set = set(housing_complexes)
+    for alias, canonical in _COMPLEX_ALIASES.items():
+        if alias in normalized_text and canonical in known_set:
+            return canonical
 
     match = re.search(
         r"(?:жк|жил(?:ой|ого)?\s+комплекс)\s*[«\"']?([^,.;\n]{2,80})",

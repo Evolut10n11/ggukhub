@@ -1,0 +1,15 @@
+services:
+  bot:
+    build: .
+    container_name: green-garden-bot
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - bot-data:/app/var
+    environment:
+      - DATABASE_URL=sqlite:///./var/app.db
+
+volumes:
+  bot-data:

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
-from app.core.enums import IncidentStatus, is_active_report_status
+from app.core.enums import IncidentStatus, ReportStatus, is_active_report_status
 from app.core.models import BitrixEvent, Incident, IncidentEvent, Report, ReportAuditLog, SessionState, User
 from app.core.schemas import ReportAuditCreate, ReportCreate, ReportLookupResult, SessionPayload
 from app.core.utils import dump_json

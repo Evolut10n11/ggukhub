@@ -60,7 +60,7 @@ def _message_transport(message: Message) -> DialogTransport:
         return None
 
     return DialogTransport(
-        telegram_id=message.from_user.id,
+        platform_user_id=message.from_user.id,
         display_name=_name_from_message(message),
         send_text=_send_text,
         clear_inline_keyboard=_clear_inline_keyboard,
@@ -95,7 +95,7 @@ def _callback_transport(callback: CallbackQuery) -> DialogTransport:
             logger.debug("Cannot clear callback keyboard: %s", error)
 
     return DialogTransport(
-        telegram_id=callback.from_user.id,
+        platform_user_id=callback.from_user.id,
         display_name=_name_from_callback(callback),
         send_text=_send_text,
         clear_inline_keyboard=_clear_inline_keyboard,

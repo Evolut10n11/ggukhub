@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from app.telegram.dialog.keyboard_protocol import KeyboardFactory
 from app.telegram.dialog.models import DialogSessionData, DialogStep
 from app.telegram.dialog.state_machine import next_missing_step
-from app.telegram.keyboards import build_jk_keyboard
 
 
 @dataclass(slots=True)
@@ -23,6 +23,7 @@ def resolve_idle_flow(
     data: DialogSessionData,
     user_phone: str | None,
     housing_complexes: list[str],
+    keyboard_factory: KeyboardFactory,
 ) -> IdleFlowDecision:
     next_step = next_missing_step(data, user_phone)
 
@@ -33,7 +34,7 @@ def resolve_idle_flow(
                 "Приняла обращение. Для заявки сначала выберите, пожалуйста, ваш ЖК ниже. "
                 "Если не нашли его в списке, нажмите «📍 Другой дом» или «❓ Нет в списке»."
             ),
-            reply_markup=build_jk_keyboard(housing_complexes, page=0),
+            reply_markup=keyboard_factory.jk_keyboard(housing_complexes, page=0),
         )
     if next_step == DialogStep.AWAITING_HOUSE:
         return IdleFlowDecision(next_step=next_step, prompt_text="Приняла обращение. Уточните, пожалуйста, дом.")

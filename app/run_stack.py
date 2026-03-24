@@ -68,6 +68,25 @@ async def _run_polling(runtime, stop_event: asyncio.Event) -> None:
             await watcher
 
 
+async def _run_max_polling(runtime, stop_event: asyncio.Event) -> None:
+    from app.max.polling import MaxPolling
+
+    settings = runtime.services.settings
+    poller = MaxPolling(settings, runtime.services)
+
+    async def _wait_for_stop() -> None:
+        await stop_event.wait()
+        await poller.stop()
+
+    watcher = asyncio.create_task(_wait_for_stop())
+    try:
+        await poller.start()
+    finally:
+        watcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await watcher
+
+
 def _install_signal_handlers(stop_event: asyncio.Event) -> list[signal.Signals]:
     loop = asyncio.get_running_loop()
     installed: list[signal.Signals] = []
@@ -99,6 +118,12 @@ async def _main() -> None:
             else:
                 polling_task = asyncio.create_task(_run_polling(runtime, stop_event))
                 tasks.add(polling_task)
+
+            if settings.max_enabled:
+                max_task = asyncio.create_task(_run_max_polling(runtime, stop_event))
+                tasks.add(max_task)
+            else:
+                logger.info("MAX_BOT_TOKEN not set, MAX bot disabled")
 
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 

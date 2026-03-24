@@ -60,7 +60,6 @@ def build_jk_keyboard(complex_names: list[str], page: int) -> InlineKeyboardMark
         builder.row(*nav_buttons)
 
     builder.row(InlineKeyboardButton(text=STANDALONE_JK_LABEL, callback_data="jk_standalone"))
-    builder.row(InlineKeyboardButton(text="❓ Нет в списке", callback_data="jk_unknown"))
 
     return builder.as_markup()
 
@@ -142,6 +141,29 @@ def build_phone_reuse_keyboard(phone: str) -> InlineKeyboardMarkup:
     builder.button(text="Указать другой", callback_data="phone_reuse_other")
     builder.adjust(1)
     return builder.as_markup()
+
+
+class TelegramKeyboardFactory:
+    def jk_keyboard(self, complex_names: list[str], page: int) -> InlineKeyboardMarkup:
+        return build_jk_keyboard(complex_names, page)
+
+    def house_keyboard(self, houses: list[HouseInfo], page: int) -> InlineKeyboardMarkup:
+        return build_house_keyboard(houses, page)
+
+    def entrance_keyboard(self, entrances: int) -> InlineKeyboardMarkup:
+        return build_entrance_keyboard(entrances)
+
+    def category_confirm_keyboard(self) -> InlineKeyboardMarkup:
+        return build_category_confirm_keyboard()
+
+    def category_select_keyboard(self) -> InlineKeyboardMarkup:
+        return build_category_select_keyboard()
+
+    def report_confirm_keyboard(self) -> InlineKeyboardMarkup:
+        return build_report_confirm_keyboard()
+
+    def phone_reuse_keyboard(self, phone: str) -> InlineKeyboardMarkup:
+        return build_phone_reuse_keyboard(phone)
 
 
 def build_main_menu_keyboard() -> ReplyKeyboardMarkup:

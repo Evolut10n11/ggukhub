@@ -67,7 +67,7 @@ ClearKeyboardCallable = Callable[[], Awaitable[None]]
 
 @dataclass(slots=True)
 class DialogTransport:
-    telegram_id: int
+    platform_user_id: int
     display_name: str | None
     send_text: SendTextCallable
     clear_inline_keyboard: ClearKeyboardCallable

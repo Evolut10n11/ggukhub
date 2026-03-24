@@ -18,15 +18,11 @@ STEP_AWAITING_REPORT_CORRECTION = DialogStep.AWAITING_REPORT_CORRECTION.value
 UNKNOWN_JK_VALUE = "не знаю"
 
 CATEGORY_LABELS = {
-    "water_off": "Нет воды",
-    "water_leak": "Протечка / затопление",
-    "electricity_off": "Нет электричества",
-    "elevator": "Лифт",
-    "heating": "Отопление",
-    "sewage": "Канализация",
-    "intercom": "Домофон",
-    "cleaning": "Уборка",
-    "other": "Другое",
+    "suggestion": "Предложение",
+    "accident": "Сообщение об аварии",
+    "recalc": "Пересчёт квартплаты",
+    "complaint": "Жалоба",
+    "other": "Иное",
 }
 
 WELCOME_TEXT = (

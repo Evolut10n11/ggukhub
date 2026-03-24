@@ -8,6 +8,7 @@ from typing import Any
 
 from app.bitrix.client import BitrixClientError
 from app.bitrix.service import BitrixTicketService
+from app.core.buildings import BuildingRegistry
 from app.core.enums import BitrixSyncStatus, ReportAuditStage
 from app.core.models import Report, User
 from app.core.regulation import REGULATION_VERSION, build_bitrix_audit_payload, build_report_composition_payload
@@ -72,6 +73,7 @@ class DialogReportFinalizer:
         bitrix_service: BitrixTicketService,
         notifier: TelegramNotifier,
         label_resolver: Callable[[str], str],
+        building_registry: BuildingRegistry | None = None,
         confirmation_budget_ms: int | None = None,
     ) -> None:
         self._storage = storage
@@ -80,6 +82,7 @@ class DialogReportFinalizer:
         self._bitrix_service = bitrix_service
         self._notifier = notifier
         self._label_resolver = label_resolver
+        self._building_registry = building_registry
         self._confirmation_budget_ms = confirmation_budget_ms
 
     async def finalize_report(self, *, user: User, data: DialogSessionData) -> DialogReportFinalizationResult:
@@ -131,6 +134,7 @@ class DialogReportFinalizer:
         )
 
         generated = await self._responder.build_report_created(local_id=report.id, bitrix_id=None)
+        mc = self._building_registry.management_company_for(draft.house) if self._building_registry else None
         summary = build_report_summary(
             ReportSummaryView(
                 report_id=report.id,
@@ -140,6 +144,9 @@ class DialogReportFinalizer:
                 entrance=draft.entrance,
                 apartment=draft.apartment,
                 bitrix_enabled=self._bitrix_service.enabled,
+                mc_name=mc.name if mc else None,
+                mc_dispatcher_phone=mc.dispatcher_phone if mc else None,
+                mc_emergency_phone=mc.emergency_phone if mc else None,
             )
         )
         reply_text = build_created_report_reply(

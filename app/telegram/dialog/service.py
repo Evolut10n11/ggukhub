@@ -78,6 +78,7 @@ class DialogService:
             bitrix_service=self._deps.bitrix_service,
             notifier=self._deps.notifier,
             label_resolver=self._deps.classifier.label,
+            building_registry=self._registry,
             confirmation_budget_ms=services.settings.report_confirmation_budget_ms,
         )
         self._correction_flow = DialogCorrectionFlow(
@@ -995,6 +996,7 @@ class DialogService:
         category = str(data.category or data.auto_category or "other")
         category_options_hint = self._category_options_hint() if category == "other" else None
         display_jk = data.jk if data.jk and data.jk not in (UNKNOWN_JK_VALUE, STANDALONE_JK_MARKER) else None
+        mc = self._registry.management_company_for(data.house or "")
         return build_report_review(
             ReportReviewView(
                 category_label=self._deps.classifier.label(category),
@@ -1005,6 +1007,9 @@ class DialogService:
                 phone=data.phone,
                 problem_text=data.problem_text,
                 category_options_hint=category_options_hint,
+                mc_name=mc.name if mc else None,
+                mc_dispatcher_phone=mc.dispatcher_phone if mc else None,
+                mc_emergency_phone=mc.emergency_phone if mc else None,
             )
         )
 

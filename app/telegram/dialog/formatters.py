@@ -16,6 +16,9 @@ class ReportReviewView:
     phone: str | None
     problem_text: str | None
     category_options_hint: str | None = None
+    mc_name: str | None = None
+    mc_dispatcher_phone: str | None = None
+    mc_emergency_phone: str | None = None
 
 
 @dataclass(slots=True)
@@ -27,6 +30,9 @@ class ReportSummaryView:
     entrance: str | None
     apartment: str
     bitrix_enabled: bool
+    mc_name: str | None = None
+    mc_dispatcher_phone: str | None = None
+    mc_emergency_phone: str | None = None
 
 
 @dataclass(slots=True)
@@ -63,6 +69,12 @@ def build_report_review(view: ReportReviewView) -> str:
         f"Телефон: {view.phone or 'не указан'}",
         f"Проблема: {view.problem_text or 'не указана'}",
     ]
+    if view.mc_name:
+        lines.append(f"УК: {view.mc_name}")
+        if view.mc_dispatcher_phone:
+            lines.append(f"Диспетчерская: {view.mc_dispatcher_phone} (круглосуточно)")
+        if view.mc_emergency_phone:
+            lines.append(f"Аварийный: {view.mc_emergency_phone}")
     if view.category_options_hint:
         lines.extend(["", view.category_options_hint])
     lines.extend(
@@ -100,8 +112,14 @@ def build_report_summary(view: ReportSummaryView) -> str:
         f"Дом: {view.house}",
         f"Подъезд: {view.entrance or 'не указан'}",
         f"Квартира: {view.apartment}",
-        f"Статус: создана (локальный №{view.report_id})",
     ]
+    if view.mc_name:
+        lines.append(f"УК: {view.mc_name}")
+        if view.mc_dispatcher_phone:
+            lines.append(f"Диспетчерская: {view.mc_dispatcher_phone} (круглосуточно)")
+        if view.mc_emergency_phone:
+            lines.append(f"Аварийный: {view.mc_emergency_phone}")
+    lines.append(f"Статус: создана (локальный №{view.report_id})")
     if view.bitrix_enabled:
         lines.append("Bitrix24: передаю заявку, номер пришлю отдельным сообщением.")
     else:

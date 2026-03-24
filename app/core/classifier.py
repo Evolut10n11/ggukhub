@@ -8,6 +8,20 @@ from app.core.utils import load_json, normalize_text
 class CategoryClassifier:
     def __init__(self, rules: dict[str, dict[str, object]]):
         self._rules = rules
+        # Pre-normalize keywords once at init for fast classify()
+        self._normalized: dict[str, list[tuple[str, int]]] = {}
+        self._labels: dict[str, str] = {}
+        for category, config in rules.items():
+            self._labels[category] = str(config.get("label", category))
+            keywords = config.get("keywords", [])
+            if not isinstance(keywords, list):
+                continue
+            tokens: list[tuple[str, int]] = []
+            for kw in keywords:
+                token = normalize_text(str(kw))
+                if token:
+                    tokens.append((token, len(token)))
+            self._normalized[category] = tokens
 
     @classmethod
     def from_file(cls, path: Path) -> "CategoryClassifier":
@@ -21,15 +35,11 @@ class CategoryClassifier:
         best_category = "other"
         best_score = 0
 
-        for category, config in self._rules.items():
-            keywords = config.get("keywords", [])
-            if not isinstance(keywords, list):
-                continue
+        for category, tokens in self._normalized.items():
             score = 0
-            for keyword in keywords:
-                token = normalize_text(str(keyword))
-                if token and token in source:
-                    score += len(token)
+            for token, length in tokens:
+                if token in source:
+                    score += length
             if score > best_score:
                 best_score = score
                 best_category = category
@@ -40,7 +50,4 @@ class CategoryClassifier:
         return list(self._rules.keys())
 
     def label(self, category: str) -> str:
-        raw = self._rules.get(category, {})
-        label = raw.get("label", category)
-        return str(label)
-
+        return self._labels.get(category, category)

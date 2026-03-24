@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -323,18 +324,32 @@ class DialogReportFinalizer:
     async def _check_report_limits(self, draft: FinalizedReportDraft) -> None:
         if draft.phone in _TEST_PHONES:
             return
-        if draft.apartment and draft.address:
-            count = await self._storage.count_weekly_reports_by_apt(draft.address, draft.apartment)
-            if count >= MAX_ACTIVE_REPORTS:
+
+        # Run both checks in parallel
+        coros = []
+        check_apt = bool(draft.apartment and draft.address)
+        check_phone = bool(draft.phone)
+        if check_apt:
+            coros.append(self._storage.count_weekly_reports_by_apt(draft.address, draft.apartment))
+        if check_phone:
+            coros.append(self._storage.count_weekly_reports_by_phone(draft.phone))
+
+        if not coros:
+            return
+
+        results = await asyncio.gather(*coros)
+        idx = 0
+        if check_apt:
+            if results[idx] >= MAX_ACTIVE_REPORTS:
                 raise ReportLimitExceeded(
-                    f"На квартиру {draft.apartment} ({draft.address}) уже создано {count} заявок за неделю (максимум {MAX_ACTIVE_REPORTS}). "
+                    f"На квартиру {draft.apartment} ({draft.address}) уже создано {results[idx]} заявок за неделю (максимум {MAX_ACTIVE_REPORTS}). "
                     "Попробуйте снова через несколько дней."
                 )
-        if draft.phone:
-            count = await self._storage.count_weekly_reports_by_phone(draft.phone)
-            if count >= MAX_ACTIVE_REPORTS:
+            idx += 1
+        if check_phone:
+            if results[idx] >= MAX_ACTIVE_REPORTS:
                 raise ReportLimitExceeded(
-                    f"На номер {draft.phone} уже создано {count} заявок за неделю (максимум {MAX_ACTIVE_REPORTS}). "
+                    f"На номер {draft.phone} уже создано {results[idx]} заявок за неделю (максимум {MAX_ACTIVE_REPORTS}). "
                     "Попробуйте снова через несколько дней."
                 )
 

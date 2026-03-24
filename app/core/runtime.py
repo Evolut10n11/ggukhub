@@ -20,6 +20,7 @@ class AppRuntime:
     async def init(self) -> None:
         await self.db.init()
         await self._validate_bitrix_fields()
+        await self._warm_up_speech()
 
     async def _validate_bitrix_fields(self) -> None:
         if not self.services.bitrix_service.enabled:
@@ -32,6 +33,14 @@ class AppRuntime:
                 logger.info("Bitrix custom fields validated successfully")
         except Exception as exc:
             logger.warning("Bitrix field validation skipped: %s", exc)
+
+    async def _warm_up_speech(self) -> None:
+        if hasattr(self.services.speech, "warm_up"):
+            try:
+                await self.services.speech.warm_up()
+                logger.info("Speech model pre-loaded")
+            except Exception as exc:
+                logger.warning("Speech warm-up failed: %s", exc)
 
     async def close(self) -> None:
         if hasattr(self.services.speech, "close"):

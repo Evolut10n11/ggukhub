@@ -330,7 +330,7 @@ async def new_report_handler(callback: CallbackQuery, services: AppServices) -> 
     await _ack_callback(callback)
     if callback.from_user is None:
         return
-    await _dialog_service(services).start(_callback_transport(callback))
+    await _dialog_service(services).start(_callback_transport(callback), include_welcome=True)
 
 
 # ── Phone callbacks ──

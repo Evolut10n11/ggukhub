@@ -7,16 +7,23 @@ from app.telegram.constants import CATEGORY_LABELS, UNKNOWN_JK_VALUE
 from app.telegram.dialog.models import DialogSessionData, DialogStep
 from app.telegram.extractors import ExtractedReportContext
 
-_CATEGORY_TEXT_MAP: dict[str, set[str]] = {
-    "suggestion": {"предложение", "предлагаю", "идея", "пожелание"},
-    "accident": {"авария", "аварийная", "протечка", "затопление", "нет воды", "нет света", "лифт", "отопление", "канализация", "домофон"},
-    "recalc": {"пересчет", "пересчёт", "квартплата", "перерасчет", "перерасчёт", "квитанция"},
-    "complaint": {"жалоба", "жалуюсь", "грязно", "мусор", "не убирают", "воняет"},
-    "other": {"другое", "другую", "иное"},
+_NORMALIZED_UNKNOWN_JK = normalize_text(UNKNOWN_JK_VALUE)
+
+_CATEGORY_TEXT_MAP: dict[str, frozenset[str]] = {
+    code: frozenset(normalize_text(t) for t in variants)
+    for code, variants in {
+        "suggestion": {"предложение", "предлагаю", "идея", "пожелание"},
+        "accident": {"авария", "аварийная", "протечка", "затопление", "нет воды", "нет света", "лифт", "отопление", "канализация", "домофон"},
+        "recalc": {"пересчет", "пересчёт", "квартплата", "перерасчет", "перерасчёт", "квитанция"},
+        "complaint": {"жалоба", "жалуюсь", "грязно", "мусор", "не убирают", "воняет"},
+        "other": {"другое", "другую", "иное"},
+    }.items()
 }
 
-_SAVED_PHONE_ACCEPT_TEXTS = {"использовать", "используй", "use", "use phone"}
-_SAVED_PHONE_REJECT_TEXTS = {"другой", "указать другой", "new phone", "change phone"}
+_YES_TEXTS = frozenset({"да", "верно", "подтверждаю", "ок", "окей", "yes"})
+_NO_TEXTS = frozenset({"нет", "неверно", "другое", "другую", "другой", "указать другой", "выбрать другую", "other", "no"})
+_SAVED_PHONE_ACCEPT_TEXTS = _YES_TEXTS | frozenset({"использовать", "используй", "use", "use phone"})
+_SAVED_PHONE_REJECT_TEXTS = _NO_TEXTS | frozenset({"другой", "указать другой", "new phone", "change phone"})
 _REPORT_STATUS_PATTERNS = (
     "что с моей заявкой",
     "что по моей заявке",
@@ -28,6 +35,11 @@ _REPORT_STATUS_PATTERNS = (
     "что с прошлой заявкой",
     "статус заявки",
 )
+
+# Pre-normalize category labels for fast lookup
+_NORMALIZED_CATEGORY_LABELS: dict[str, str] = {
+    code: normalize_text(label) for code, label in CATEGORY_LABELS.items()
+}
 
 
 def cleanup_optional_field(raw: str) -> str | None:
@@ -44,11 +56,11 @@ def is_blank(value: str | None) -> bool:
 def is_unknown_jk(value: str | None) -> bool:
     if is_blank(value):
         return True
-    return normalize_text(str(value)) == normalize_text(UNKNOWN_JK_VALUE)
+    return normalize_text(str(value)) == _NORMALIZED_UNKNOWN_JK
 
 
 def merge_extracted_context(data: DialogSessionData, extracted: ExtractedReportContext) -> DialogSessionData:
-    updated = data.model_copy(deep=True)
+    updated = data.model_copy()
 
     if extracted.jk and is_unknown_jk(updated.jk):
         updated.jk = extracted.jk
@@ -117,33 +129,19 @@ def _entrance_answer_pending(data: DialogSessionData) -> bool:
 
 
 def is_yes_text(text: str) -> bool:
-    value = normalize_text(text)
-    return value in {"да", "верно", "подтверждаю", "ок", "окей", "yes"}
+    return normalize_text(text) in _YES_TEXTS
 
 
 def is_no_or_other_text(text: str) -> bool:
-    value = normalize_text(text)
-    return value in {
-        "нет",
-        "неверно",
-        "другое",
-        "другую",
-        "другой",
-        "указать другой",
-        "выбрать другую",
-        "other",
-        "no",
-    }
+    return normalize_text(text) in _NO_TEXTS
 
 
 def is_saved_phone_accept_text(text: str) -> bool:
-    value = normalize_text(text)
-    return is_yes_text(text) or value in _SAVED_PHONE_ACCEPT_TEXTS
+    return normalize_text(text) in _SAVED_PHONE_ACCEPT_TEXTS
 
 
 def is_saved_phone_reject_text(text: str) -> bool:
-    value = normalize_text(text)
-    return is_no_or_other_text(text) or value in _SAVED_PHONE_REJECT_TEXTS
+    return normalize_text(text) in _SAVED_PHONE_REJECT_TEXTS
 
 
 def is_report_status_request(text: str) -> bool:
@@ -168,17 +166,19 @@ def category_from_text(
     if value in available:
         return value
 
-    labels = category_labels or CATEGORY_LABELS
+    # Check against pre-normalized labels first
     for code in available:
-        if value == normalize_text(label_resolver(code)):
-            return code
-        if value == normalize_text(labels.get(code, "")):
+        if value == _NORMALIZED_CATEGORY_LABELS.get(code, ""):
             return code
 
+    # Fallback to dynamic label resolver
+    if category_labels:
+        for code in available:
+            if value == normalize_text(category_labels.get(code, "")):
+                return code
+
     for code, variants in _CATEGORY_TEXT_MAP.items():
-        if code not in available:
-            continue
-        if value in {normalize_text(token) for token in variants}:
+        if code in available and value in variants:
             return code
 
     return None

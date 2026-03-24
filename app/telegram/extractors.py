@@ -55,6 +55,16 @@ _APARTMENT_PATTERNS = (
     r"\bап(?:артамент)?\.?\s*([0-9]+[0-9а-яa-z/-]*)",
 )
 
+# Pre-compile regex patterns once
+_COMPILED_HOUSE = tuple(re.compile(p, re.IGNORECASE) for p in _HOUSE_PATTERNS)
+_COMPILED_ENTRANCE = tuple(re.compile(p, re.IGNORECASE) for p in _ENTRANCE_PATTERNS)
+_COMPILED_APARTMENT = tuple(re.compile(p, re.IGNORECASE) for p in _APARTMENT_PATTERNS)
+_COMPILED_PHONE = re.compile(r"(\+?\d[\d\-\(\)\s]{9,}\d)")
+_COMPILED_JK_REGEX = re.compile(
+    r"(?:жк|жил(?:ой|ого)?\s+комплекс)\s*[«\"']?([^,.;\n]{2,80})",
+    flags=re.IGNORECASE,
+)
+
 
 @dataclass(slots=True)
 class ExtractedReportContext:
@@ -80,19 +90,19 @@ def extract_report_context(text: str, housing_complexes: list[str]) -> Extracted
 
 
 def extract_house(text: str) -> str | None:
-    return _extract_token(text, _HOUSE_PATTERNS)
+    return _extract_compiled(text, _COMPILED_HOUSE)
 
 
 def extract_entrance(text: str) -> str | None:
-    return _extract_token(text, _ENTRANCE_PATTERNS)
+    return _extract_compiled(text, _COMPILED_ENTRANCE)
 
 
 def extract_apartment(text: str) -> str | None:
-    return _extract_token(text, _APARTMENT_PATTERNS)
+    return _extract_compiled(text, _COMPILED_APARTMENT)
 
 
 def extract_phone(text: str) -> str | None:
-    for candidate in re.findall(r"(\+?\d[\d\-\(\)\s]{9,}\d)", text):
+    for candidate in _COMPILED_PHONE.findall(text):
         phone = normalize_phone(candidate)
         if phone is not None:
             return phone
@@ -135,11 +145,7 @@ def extract_housing_complex(text: str, housing_complexes: list[str]) -> str | No
         if alias in normalized_text and canonical in known_set:
             return canonical
 
-    match = re.search(
-        r"(?:жк|жил(?:ой|ого)?\s+комплекс)\s*[«\"']?([^,.;\n]{2,80})",
-        text,
-        flags=re.IGNORECASE,
-    )
+    match = _COMPILED_JK_REGEX.search(text)
     if not match:
         return None
 
@@ -150,9 +156,9 @@ def extract_housing_complex(text: str, housing_complexes: list[str]) -> str | No
     return _best_complex_match(candidate, housing_complexes)
 
 
-def _extract_token(text: str, patterns: tuple[str, ...]) -> str | None:
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
+def _extract_compiled(text: str, compiled: tuple[re.Pattern[str], ...]) -> str | None:
+    for pattern in compiled:
+        match = pattern.search(text)
         if match:
             return match.group(1).strip()
     return None

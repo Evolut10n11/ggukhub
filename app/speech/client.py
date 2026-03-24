@@ -125,7 +125,11 @@ class SpeechToTextClient:
                 audio_path,
                 language=language,
                 vad_filter=True,
-                beam_size=5,
+                beam_size=1,
+                best_of=1,
+                temperature=0,
+                condition_on_previous_text=False,
+                no_speech_threshold=0.6,
             )
         except Exception as error:
             raise SpeechToTextError(f"Local Whisper inference failed: {error}") from error
@@ -136,6 +140,11 @@ class SpeechToTextClient:
             if text:
                 chunks.append(text)
         return " ".join(chunks).strip()
+
+    async def warm_up(self) -> None:
+        """Pre-load the local Whisper model at startup to avoid cold-start delay."""
+        if self.enabled and self._is_local_mode:
+            await self._get_local_model()
 
     def close(self) -> None:
         if self._local_model is not None:

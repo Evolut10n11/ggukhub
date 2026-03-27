@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     bitrix_field_apartment: str = Field(default="UF_CRM_APARTMENT", alias="BITRIX_FIELD_APARTMENT")
     bitrix_field_status: str = Field(default="STATUS_ID", alias="BITRIX_FIELD_STATUS")
 
+    bitrix_deal_stage_id: str = Field(default="C1:NEW", alias="BITRIX_DEAL_STAGE_ID")
+    bitrix_deal_assigned_by_id: str = Field(default="18388", alias="BITRIX_DEAL_ASSIGNED_BY_ID")
+    bitrix_deal_category_id: str = Field(default="1", alias="BITRIX_DEAL_CATEGORY_ID")
+    bitrix_deal_source_id: str = Field(default="49", alias="BITRIX_DEAL_SOURCE_ID")
+
     bitrix_timeout_seconds: float = Field(default=10.0, alias="BITRIX_TIMEOUT_SECONDS")
     bitrix_status_cache_ttl_seconds: int = Field(default=600, alias="BITRIX_STATUS_CACHE_TTL_SECONDS")
     bitrix_manager_user_ids: str = Field(default="", alias="BITRIX_MANAGER_USER_IDS")

@@ -22,6 +22,7 @@ class BitrixTicketPayloadInput:
     category: str
     phone: str
     apartment: str | None = None
+    contact_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -104,7 +105,6 @@ class BitrixNotifyPayloadInput:
 class BitrixContactPayloadInput:
     name: str
     phone: str
-    telegram_id: str
 
 
 @dataclass(slots=True)

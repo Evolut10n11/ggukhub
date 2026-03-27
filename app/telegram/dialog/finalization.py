@@ -192,7 +192,10 @@ class DialogReportFinalizer:
             budget_ms=int(timeout_seconds * 1000),
         )
         try:
-            bitrix_id = await self._bitrix_service.create_ticket(report=report, user=user)
+            contact_id = await self._resolve_contact(user)
+            bitrix_id = await self._bitrix_service.create_ticket(
+                report=report, user=user, contact_id=contact_id
+            )
             await self._storage.set_report_bitrix_id(report.id, bitrix_id)
         except BitrixClientError as error:
             telemetry_payload = telemetry.finish(
@@ -243,8 +246,6 @@ class DialogReportFinalizer:
         else:
             followup = f"Заявка №{report.id} передана в Bitrix24. Номер в Bitrix24: {bitrix_id}."
         await self._notifier.send_message(telegram_id=user.telegram_id, text=followup)
-
-        await self._try_link_contact(user=user, lead_id=bitrix_id)
 
     @staticmethod
     def build_report_draft(data: DialogSessionData, user: User) -> FinalizedReportDraft:
@@ -305,28 +306,15 @@ class DialogReportFinalizer:
             "bitrix_sync_outcome": "queued" if self._bitrix_service.enabled else "disabled",
         }
 
-    async def _try_link_contact(self, *, user: User, lead_id: str) -> None:
-        if not getattr(self._bitrix_service, "_settings", None):
-            return
-        settings = self._bitrix_service._settings
-        if not settings.bitrix_contact_linking_enabled:
-            return
-
-        contact_id = user.bitrix_contact_id
-        if not contact_id:
-            display_name = user.name or f"Telegram {user.telegram_id}"
-            phone = user.phone or ""
-            contact_id = await self._bitrix_service.create_contact(
-                name=display_name,
-                phone=phone,
-                telegram_id=str(user.telegram_id),
-            )
-            if contact_id:
-                await self._storage.update_user_bitrix_contact_id(user.id, contact_id)
-                user.bitrix_contact_id = contact_id
-
+    async def _resolve_contact(self, user: User) -> str | None:
+        phone = user.phone or ""
+        if not phone:
+            return None
+        contact_id = await self._bitrix_service.find_contact_by_phone(phone)
         if contact_id:
-            await self._bitrix_service.link_contact_to_lead(lead_id, contact_id)
+            return contact_id
+        display_name = user.name or f"Telegram {user.telegram_id}"
+        return await self._bitrix_service.create_contact(name=display_name, phone=phone)
 
     async def _check_report_limits(self, draft: FinalizedReportDraft) -> None:
         if draft.phone in _TEST_PHONES:

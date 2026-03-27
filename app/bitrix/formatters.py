@@ -4,7 +4,7 @@ from app.core.models import Report
 
 
 def build_ticket_title(report: Report) -> str:
-    return f"Заявка УК #{report.id}"
+    return f"Обращение через MAX {report.text}"
 
 
 def build_ticket_description(report: Report) -> str:

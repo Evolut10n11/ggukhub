@@ -2,13 +2,8 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def normalize_text(value: str) -> str:

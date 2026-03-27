@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
-
-from datetime import timedelta
 
 from sqlalchemy import Select, func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -98,7 +96,7 @@ class Storage:
 
     async def count_weekly_reports_by_apt(self, address: str, apt: str) -> int:
         async with self._session_factory() as session:
-            week_ago = datetime.utcnow() - timedelta(days=7)
+            week_ago = datetime.now(timezone.utc) - timedelta(days=7)
             stmt = (
                 select(func.count())
                 .select_from(Report)
@@ -110,7 +108,7 @@ class Storage:
 
     async def count_weekly_reports_by_phone(self, phone: str) -> int:
         async with self._session_factory() as session:
-            week_ago = datetime.utcnow() - timedelta(days=7)
+            week_ago = datetime.now(timezone.utc) - timedelta(days=7)
             stmt = (
                 select(func.count())
                 .select_from(Report)

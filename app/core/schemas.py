@@ -29,13 +29,6 @@ class ReportAuditCreate(BaseModel):
     payload: dict[str, Any]
 
 
-class ParsedBitrixEvent(BaseModel):
-    event_type: str = "generic"
-    bitrix_id: str | None = None
-    status: str | None = None
-    message: str | None = None
-
-
 class ReportLookupResult(BaseModel):
     report_id: int
     created_at: datetime

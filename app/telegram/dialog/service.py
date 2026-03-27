@@ -955,7 +955,7 @@ class DialogService:
         resume_prompt = build_resume_prompt(snapshot.step)
         if resume_prompt:
             reply = f"{reply}\n\n{resume_prompt}"
-        await transport.send_text(reply, None)
+        await transport.send_text(reply, self._kb.back_to_menu_keyboard())
 
     async def _send_report_confirmation(
         self,

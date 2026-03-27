@@ -60,6 +60,7 @@ def build_jk_keyboard(complex_names: list[str], page: int) -> InlineKeyboardMark
         builder.row(*nav_buttons)
 
     builder.row(InlineKeyboardButton(text=STANDALONE_JK_LABEL, callback_data="jk_standalone"))
+    builder.row(InlineKeyboardButton(text="📋 Статус заявки", callback_data="back_to_menu_status"))
 
     return builder.as_markup()
 
@@ -168,6 +169,12 @@ class TelegramKeyboardFactory:
     def new_report_keyboard(self) -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="📝 Создать ещё заявку", callback_data="new_report")
+        builder.adjust(1)
+        return builder.as_markup()
+
+    def back_to_menu_keyboard(self) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🏠 Вернуться в меню", callback_data="back_to_menu")
         builder.adjust(1)
         return builder.as_markup()
 

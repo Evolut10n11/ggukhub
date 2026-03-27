@@ -333,6 +333,22 @@ async def new_report_handler(callback: CallbackQuery, services: AppServices) -> 
     await _dialog_service(services).start(_callback_transport(callback), include_welcome=True)
 
 
+@router.callback_query(F.data == "back_to_menu")
+async def back_to_menu_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).start(_callback_transport(callback), include_welcome=True)
+
+
+@router.callback_query(F.data == "back_to_menu_status")
+async def back_to_menu_status_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).process_text(_callback_transport(callback), MAIN_MENU_STATUS)
+
+
 # ── Phone callbacks ──
 
 

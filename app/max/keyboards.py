@@ -66,7 +66,7 @@ class MaxKeyboardFactory:
             rows.append(nav)
 
         rows.append([_cb_button(STANDALONE_JK_LABEL, "jk_standalone")])
-
+        rows.append([_cb_button("📋 Статус заявки", "back_to_menu_status")])
         return [_inline_keyboard_attachment(rows)]
 
     def house_keyboard(self, houses: list[HouseInfo], page: int) -> list[dict[str, Any]]:
@@ -128,4 +128,9 @@ class MaxKeyboardFactory:
     def new_report_keyboard(self) -> list[dict[str, Any]]:
         return [_inline_keyboard_attachment([
             [_cb_button("📝 Создать ещё заявку", "new_report")],
+        ])]
+
+    def back_to_menu_keyboard(self) -> list[dict[str, Any]]:
+        return [_inline_keyboard_attachment([
+            [_cb_button("🏠 Вернуться в меню", "back_to_menu")],
         ])]

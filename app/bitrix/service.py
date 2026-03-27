@@ -24,6 +24,7 @@ from app.bitrix.payloads import (
     build_comment_list_payload,
     build_contact_add_payload,
     build_create_ticket_payload,
+    build_find_contact_by_phone_payload,
     build_im_notify_payload,
     build_lead_contact_link_payload,
     build_lead_fields_payload,
@@ -55,7 +56,7 @@ class BitrixTicketService:
     def timeout_seconds(self) -> float:
         return self._client.timeout_seconds
 
-    async def create_ticket(self, report: Report, user: User) -> str:
+    async def create_ticket(self, report: Report, user: User, contact_id: str | None = None) -> str:
         payload_input = BitrixTicketPayloadInput(
             local_report_id=report.id,
             telegram_id=user.telegram_id,
@@ -66,6 +67,7 @@ class BitrixTicketService:
             category=report.category,
             phone=report.phone,
             apartment=report.apt,
+            contact_id=contact_id,
         )
         payload = build_create_ticket_payload(self._settings, payload_input)
         data = await self._client.call(self._settings.bitrix_ticket_method, payload)
@@ -224,12 +226,25 @@ class BitrixTicketService:
         for uid in manager_ids:
             await self.notify_manager(uid, message)
 
-    # --- Feature 6: crm.contact.add + crm.lead.contact.add ---
+    # --- Feature 6: crm.duplicate.findbycomm + crm.contact.add ---
 
-    async def create_contact(self, name: str, phone: str, telegram_id: str) -> str | None:
+    async def find_contact_by_phone(self, phone: str) -> str | None:
+        try:
+            payload = build_find_contact_by_phone_payload(phone)
+            data = await self._client.call("crm.duplicate.findbycomm", payload)
+            result = data.get("result", {})
+            contacts = result.get("CONTACT", [])
+            if contacts:
+                return str(contacts[0])
+            return None
+        except BitrixClientError as exc:
+            logger.warning("Failed to find Bitrix contact by phone: %s", exc)
+            return None
+
+    async def create_contact(self, name: str, phone: str) -> str | None:
         try:
             payload = build_contact_add_payload(
-                BitrixContactPayloadInput(name=name, phone=phone, telegram_id=telegram_id)
+                BitrixContactPayloadInput(name=name, phone=phone)
             )
             data = await self._client.call("crm.contact.add", payload)
             return self._client.extract_result_id(data)

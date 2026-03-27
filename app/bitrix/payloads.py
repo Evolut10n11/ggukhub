@@ -19,22 +19,20 @@ def build_create_ticket_payload(
     payload_input: BitrixTicketPayloadInput,
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
-        settings.bitrix_field_title: payload_input.title,
-        settings.bitrix_field_description: payload_input.description,
-        settings.bitrix_field_jk: payload_input.jk or "не указан",
-        settings.bitrix_field_address: payload_input.address,
-        settings.bitrix_field_category: payload_input.category,
-        settings.bitrix_field_telegram_id: str(payload_input.telegram_id),
-        settings.bitrix_field_local_report_id: str(payload_input.local_report_id),
+        "TITLE": payload_input.title,
+        "CATEGORY_ID": settings.bitrix_deal_category_id,
+        "CREATED_BY_ID": "1",
+        "MODIFY_BY_ID": "1",
+        "MOVED_BY_ID": "1",
+        "SOURCE_ID": settings.bitrix_deal_source_id,
+        "STAGE_ID": settings.bitrix_deal_stage_id,
+        "COMMENTS": payload_input.description,
+        "ASSIGNED_BY_ID": settings.bitrix_deal_assigned_by_id,
+        "SOURCE_DESCRIPTION": "",
     }
 
-    if payload_input.apartment:
-        fields[settings.bitrix_field_apartment] = payload_input.apartment
-
-    if settings.bitrix_field_phone == "PHONE":
-        fields["PHONE"] = [{"VALUE": payload_input.phone, "VALUE_TYPE": "WORK"}]
-    else:
-        fields[settings.bitrix_field_phone] = payload_input.phone
+    if payload_input.contact_id:
+        fields["CONTACT_ID"] = payload_input.contact_id
 
     return {"fields": fields}
 
@@ -86,12 +84,19 @@ def build_im_notify_payload(payload_input: BitrixNotifyPayloadInput) -> dict[str
     }
 
 
+def build_find_contact_by_phone_payload(phone: str) -> dict[str, Any]:
+    return {
+        "type": "PHONE",
+        "values": [phone],
+        "entity_type": "CONTACT",
+    }
+
+
 def build_contact_add_payload(payload_input: BitrixContactPayloadInput) -> dict[str, Any]:
     return {
         "fields": {
             "NAME": payload_input.name,
-            "PHONE": [{"VALUE": payload_input.phone, "VALUE_TYPE": "MOBILE"}],
-            "UF_CRM_TELEGRAM_ID": payload_input.telegram_id,
+            "PHONE": [{"VALUE": payload_input.phone, "VALUE_TYPE": "WORK"}],
         },
     }
 

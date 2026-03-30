@@ -57,6 +57,10 @@ class BitrixTicketService:
     def timeout_seconds(self) -> float:
         return self._client.timeout_seconds
 
+    @property
+    def contact_linking_enabled(self) -> bool:
+        return self._settings.bitrix_contact_linking_enabled
+
     async def create_ticket(self, report: Report, user: User, contact_id: str | None = None) -> str:
         payload_input = BitrixTicketPayloadInput(
             local_report_id=report.id,

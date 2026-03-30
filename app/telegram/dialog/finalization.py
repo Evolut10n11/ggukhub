@@ -307,6 +307,8 @@ class DialogReportFinalizer:
         }
 
     async def _resolve_contact(self, *, user: User, report: Report) -> str | None:
+        if not bool(getattr(self._bitrix_service, "contact_linking_enabled", False)):
+            return None
         phone = str(report.phone or user.phone or "").strip()
         if not phone:
             return None

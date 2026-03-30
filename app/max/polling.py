@@ -24,6 +24,12 @@ class MaxPolling:
         self._kb = MaxKeyboardFactory()
         self._marker: int | None = None
         self._running = False
+        self._dialog_service: DialogService | None = None
+
+    def _get_dialog_service(self) -> DialogService:
+        if self._dialog_service is None:
+            self._dialog_service = DialogService(self._services, keyboard_factory=self._kb)
+        return self._dialog_service
 
     async def start(self) -> None:
         me = await self._client.get_me()
@@ -82,7 +88,7 @@ class MaxPolling:
         display_name = user.get("name")
         logger.info("MAX bot_started from user=%s chat=%s", user_id, chat_id)
         transport = self._make_transport(chat_id, user_id, display_name)
-        service = DialogService(self._services, keyboard_factory=self._kb)
+        service = self._get_dialog_service()
         await service.start(transport, include_welcome=True)
 
     async def _handle_message(self, update: dict[str, Any]) -> None:
@@ -122,13 +128,13 @@ class MaxPolling:
         # Handle /start
         if text.lower() in ("/start", "/new"):
             transport = self._make_transport(chat_id, user_id, display_name)
-            service = DialogService(self._services, keyboard_factory=self._kb)
+            service = self._get_dialog_service()
             await service.start(transport, include_welcome=(text.lower() == "/start"))
             return
 
         # Regular text
         transport = self._make_transport(chat_id, user_id, display_name)
-        service = DialogService(self._services, keyboard_factory=self._kb)
+        service = self._get_dialog_service()
         await service.process_text(transport, text)
 
     async def _handle_voice(self, chat_id: int, user_id: int, display_name: str | None, audio_url: str) -> None:
@@ -157,7 +163,7 @@ class MaxPolling:
 
         await self._client.send_message(chat_id, f"Распознала так: «{text}».")
         transport = self._make_transport(chat_id, user_id, display_name)
-        service = DialogService(self._services, keyboard_factory=self._kb)
+        service = self._get_dialog_service()
         await service.process_text(transport, text, from_voice=True)
 
     async def _handle_callback(self, update: dict[str, Any]) -> None:
@@ -174,7 +180,7 @@ class MaxPolling:
 
         display_name = user.get("name")
         transport = self._make_transport(chat_id, user_id, display_name)
-        service = DialogService(self._services, keyboard_factory=self._kb)
+        service = self._get_dialog_service()
 
         # Acknowledge callback
         if callback_id:

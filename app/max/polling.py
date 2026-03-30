@@ -180,6 +180,13 @@ class MaxPolling:
         service = self._get_dialog_service()
         await service.process_text(transport, text, from_voice=True)
 
+    async def _send_jk_page(self, transport: DialogTransport, page: int) -> None:
+        await transport.send_text(
+            "Через меня можно быстро отправить заявку в диспетчерскую — текстом или голосом.\n\n"
+            "Сначала выберите ваш жилой комплекс:",
+            self._kb.jk_keyboard(self._services.building_registry.complex_names, page=page),
+        )
+
     async def _handle_callback(self, update: dict[str, Any]) -> None:
         callback = update.get("callback", {})
         callback_id = callback.get("callback_id")
@@ -212,7 +219,7 @@ class MaxPolling:
         elif payload.startswith("jk_page:"):
             page_str = payload.split(":", 1)[1]
             if page_str != "stay":
-                await service.start(transport, include_welcome=False)
+                await self._send_jk_page(transport, int(page_str))
         elif payload == "jk_standalone":
             await service.show_standalone_houses(transport)
         elif payload == "jk_unknown":

@@ -151,9 +151,10 @@ def build_created_report_reply(parts: CreatedReportReplyParts) -> str:
 
 def build_report_lookup_reply(view: ReportLookupView) -> str:
     created_at = view.created_at.astimezone().strftime("%d.%m.%Y %H:%M")
+    display_id = view.bitrix_id or str(view.report_id)
     lines = [
         "Нашла последнюю заявку:",
-        f"Номер: {view.report_id}",
+        f"Номер: {display_id}",
         f"Статус: {report_status_label(view.status)}",
         f"Создана: {created_at}",
         f"Тип: {view.category_label}",

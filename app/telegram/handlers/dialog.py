@@ -11,17 +11,8 @@ from aiogram.types import CallbackQuery, ErrorEvent, Message
 from app.core.services import AppServices
 from app.speech.client import SpeechToTextError
 from app.telegram.constants import CATEGORY_LABELS
-from app.telegram.dialog.models import DialogSessionData, DialogTransport
+from app.telegram.dialog.models import DialogTransport
 from app.telegram.dialog.service import DialogService
-from app.telegram.dialog.state_machine import (
-    category_from_text,
-    is_no_or_other_text,
-    is_unknown_jk,
-    is_yes_text,
-    merge_extracted_context,
-    next_missing_step,
-)
-from app.telegram.extractors import ExtractedReportContext
 from app.telegram.keyboards import (
     MAIN_MENU_NEW_REQUEST,
     MAIN_MENU_STATUS,
@@ -108,35 +99,6 @@ async def _ack_callback(callback: CallbackQuery, text: str | None = None, *, sho
     except Exception as error:
         logger.debug("Callback ack skipped: %s", error)
 
-
-def _is_unknown_jk(value: str | None) -> bool:
-    return is_unknown_jk(value)
-
-
-def _merge_extracted_context(data: dict[str, Any], extracted: ExtractedReportContext) -> None:
-    merged = merge_extracted_context(DialogSessionData.from_mapping(data), extracted)
-    data.clear()
-    data.update(merged.to_mapping())
-
-
-def _next_missing_step(data: dict[str, Any], user_phone: str | None) -> str:
-    return next_missing_step(DialogSessionData.from_mapping(data), user_phone).value
-
-
-def _is_yes_text(text: str) -> bool:
-    return is_yes_text(text)
-
-
-def _is_no_or_other_text(text: str) -> bool:
-    return is_no_or_other_text(text)
-
-
-def _category_from_text(services: AppServices, text: str) -> str | None:
-    return category_from_text(
-        text,
-        categories=services.classifier.categories(),
-        label_resolver=services.classifier.label,
-    )
 
 
 async def _process_text_dialog(message: Message, services: AppServices, text: str, *, from_voice: bool = False) -> None:
@@ -446,12 +408,12 @@ async def error_handler(event: ErrorEvent) -> bool:
                 show_alert=True,
             )
         except Exception:
-            pass
+            logger.debug("Failed to send error callback answer", exc_info=True)
 
     if event.update.message is not None:
         try:
             await event.update.message.answer("Произошла ошибка. Напишите сообщение, и я продолжу оформление заявки.")
         except Exception:
-            pass
+            logger.debug("Failed to send error message reply", exc_info=True)
 
     return True

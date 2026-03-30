@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from app.core.enums import report_status_label
 from app.telegram.dialog.models import DialogStep
 
 
@@ -145,7 +146,7 @@ def build_report_lookup_reply(view: ReportLookupView) -> str:
     lines = [
         "Нашла последнюю заявку:",
         f"Номер: {view.report_id}",
-        f"Статус: {view.status or 'не указан'}",
+        f"Статус: {report_status_label(view.status)}",
         f"Создана: {created_at}",
         f"Тип: {view.category_label}",
         f"Адрес: {view.address}",

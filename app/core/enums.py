@@ -7,6 +7,8 @@ from app.core.utils import normalize_text
 
 class ReportStatus(str, Enum):
     NEW = "new"
+    IN_PROGRESS = "in_progress"
+    CLOSED = "closed"
 
 
 class IncidentStatus(str, Enum):
@@ -24,6 +26,16 @@ class BitrixSyncStatus(str, Enum):
     SYNCED = "synced"
 
 
+_REPORT_STATUS_LABELS: dict[str, str] = {
+    "new": "Новая заявка",
+    "in_progress": "В работе",
+    "closed": "Закрыта",
+    "done": "Выполнена",
+    "resolved": "Решена",
+    "completed": "Выполнена",
+    "cancelled": "Отменена",
+}
+
 _CLOSED_REPORT_STATUS_TOKENS = frozenset(
     {
         "closed",
@@ -37,6 +49,16 @@ _CLOSED_REPORT_STATUS_TOKENS = frozenset(
         "отменен",
     }
 )
+
+
+def report_status_label(status: str | None) -> str:
+    if not status:
+        return "Не указан"
+    normalized = normalize_text(status)
+    label = _REPORT_STATUS_LABELS.get(normalized)
+    if label:
+        return label
+    return status
 
 
 def is_active_report_status(status: str | None) -> bool:

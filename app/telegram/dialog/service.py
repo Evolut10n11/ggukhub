@@ -980,17 +980,23 @@ class DialogService:
         except ReportLimitExceeded as exc:
             await transport.send_text(f"⚠ Не удалось создать заявку: {exc.reason}", None)
             return
-        await transport.send_text(result.reply_text, self._kb.new_report_keyboard())
+        reply_text = result.reply_text
         if self._deps.bitrix_service.enabled:
-            bitrix_timeout = float(getattr(self._deps.bitrix_service, "timeout_seconds", 10.0))
-            self._runtime.register_background_task(
-                self._report_finalizer.sync_bitrix_ticket(
-                    report=result.report,
-                    user=user,
-                    is_mass_incident=result.is_mass_incident,
-                ),
-                timeout_seconds=bitrix_timeout + 5.0,
+            bitrix_id = await self._report_finalizer.sync_bitrix_ticket(
+                report=result.report,
+                user=user,
+                is_mass_incident=result.is_mass_incident,
+                notify_user=False,
             )
+            reply_text = await self._report_finalizer.build_created_reply_text(
+                report=result.report,
+                user=user,
+                data=data,
+                incident_message=result.confirmation.incident_message,
+                bitrix_id=bitrix_id,
+                bitrix_sync_outcome="synced" if bitrix_id else "failed",
+            )
+        await transport.send_text(reply_text, self._kb.new_report_keyboard())
 
     def _build_report_review(self, data: DialogSessionData) -> str:
         category = str(data.category or data.auto_category or "other")

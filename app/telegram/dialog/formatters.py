@@ -31,6 +31,8 @@ class ReportSummaryView:
     entrance: str | None
     apartment: str
     bitrix_enabled: bool
+    bitrix_id: str | None = None
+    bitrix_sync_outcome: str | None = None
     mc_name: str | None = None
     mc_dispatcher_phone: str | None = None
     mc_emergency_phone: str | None = None
@@ -106,6 +108,7 @@ def build_saved_phone_prompt(phone: str | None) -> str:
 
 
 def build_report_summary(view: ReportSummaryView) -> str:
+    bitrix_sync_outcome = view.bitrix_sync_outcome or ("queued" if view.bitrix_enabled else "disabled")
     lines = [
         "Сводка по заявке:",
         f"Тип: {view.category_label}",
@@ -120,10 +123,15 @@ def build_report_summary(view: ReportSummaryView) -> str:
             lines.append(f"Диспетчерская: {view.mc_dispatcher_phone} (круглосуточно)")
         if view.mc_emergency_phone:
             lines.append(f"Аварийный: {view.mc_emergency_phone}")
-    lines.append(f"Статус: создана (локальный №{view.report_id})")
-    if view.bitrix_enabled:
-        lines.append("Bitrix24: передаю заявку, номер пришлю отдельным сообщением.")
+    if view.bitrix_id:
+        lines.append(f"Статус: создана (Bitrix24 №{view.bitrix_id})")
     else:
+        lines.append("Статус: создана")
+    if bitrix_sync_outcome == "queued" and not view.bitrix_id:
+        lines.append("Bitrix24: передаю заявку, номер пришлю отдельным сообщением.")
+    elif bitrix_sync_outcome == "failed":
+        lines.append("Bitrix24: не удалось передать автоматически, уточняю вручную.")
+    elif bitrix_sync_outcome == "disabled":
         lines.append("Bitrix24: интеграция сейчас выключена.")
     return "\n".join(lines)
 

@@ -144,6 +144,7 @@ class DialogReportFinalizer:
                 entrance=draft.entrance,
                 apartment=draft.apartment,
                 bitrix_enabled=self._bitrix_service.enabled,
+                bitrix_sync_outcome="queued" if self._bitrix_service.enabled else "disabled",
                 mc_name=mc.name if mc else None,
                 mc_dispatcher_phone=mc.dispatcher_phone if mc else None,
                 mc_emergency_phone=mc.emergency_phone if mc else None,
@@ -178,13 +179,53 @@ class DialogReportFinalizer:
             is_mass_incident=incident.is_mass,
         )
 
+    async def build_created_reply_text(
+        self,
+        *,
+        report: Report,
+        user: User,
+        data: DialogSessionData,
+        incident_message: str | None,
+        bitrix_id: str | None,
+        bitrix_sync_outcome: str,
+    ) -> str:
+        draft = self.build_report_draft(data, user)
+        generated = await self._responder.build_report_created(local_id=report.id, bitrix_id=bitrix_id)
+        mc = self._building_registry.management_company_for(draft.house) if self._building_registry else None
+        summary = build_report_summary(
+            ReportSummaryView(
+                report_id=report.id,
+                category_label=self._label_resolver(draft.category),
+                jk=draft.jk,
+                house=draft.house,
+                entrance=draft.entrance,
+                apartment=draft.apartment,
+                bitrix_enabled=self._bitrix_service.enabled,
+                bitrix_id=bitrix_id,
+                bitrix_sync_outcome=bitrix_sync_outcome,
+                mc_name=mc.name if mc else None,
+                mc_dispatcher_phone=mc.dispatcher_phone if mc else None,
+                mc_emergency_phone=mc.emergency_phone if mc else None,
+            )
+        )
+        return build_created_report_reply(
+            CreatedReportReplyParts(
+                standard_reply=generated.text,
+                summary=summary,
+                incident_message=incident_message,
+                incident_report_id=report.id if incident_message else None,
+                include_missing_jk_note=draft.jk is None,
+            )
+        )
+
     async def sync_bitrix_ticket(
         self,
         *,
         report: Report,
         user: User,
         is_mass_incident: bool,
-    ) -> None:
+        notify_user: bool = True,
+    ) -> str | None:
         timeout_seconds = float(getattr(self._bitrix_service, "timeout_seconds", 10.0))
         telemetry = start_flow_telemetry(
             "bitrix_sync",
@@ -215,14 +256,15 @@ class DialogReportFinalizer:
                 ),
             )
             logger.warning("Bitrix ticket creation failed for report %s: %s | %s", report.id, error, telemetry_payload)
-            await self._notifier.send_message(
-                telegram_id=user.telegram_id,
-                text=(
-                    f"Заявка №{report.id} уже сохранена. "
-                    "Передачу в Bitrix24 уточняю вручную и вернусь с обновлением."
-                ),
-            )
-            return
+            if notify_user:
+                await self._notifier.send_message(
+                    telegram_id=user.telegram_id,
+                    text=(
+                        f"Заявка №{report.id} уже сохранена. "
+                        "Передачу в Bitrix24 уточняю вручную и вернусь с обновлением."
+                    ),
+                )
+            return None
 
         telemetry_payload = telemetry.finish(
             local_report_id=report.id,
@@ -245,7 +287,9 @@ class DialogReportFinalizer:
             await self._bitrix_service.notify_managers_urgent(report)
         else:
             followup = f"Заявка №{report.id} передана в Bitrix24. Номер в Bitrix24: {bitrix_id}."
-        await self._notifier.send_message(telegram_id=user.telegram_id, text=followup)
+        if notify_user:
+            await self._notifier.send_message(telegram_id=user.telegram_id, text=followup)
+        return bitrix_id
 
     @staticmethod
     def build_report_draft(data: DialogSessionData, user: User) -> FinalizedReportDraft:

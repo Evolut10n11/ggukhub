@@ -10,12 +10,11 @@ class RuleResponder:
 
     async def build_report_created(self, local_id: int, bitrix_id: str | None) -> GeneratedResponse:
         telemetry = start_flow_telemetry("report_created", "response_generator")
+        display_id = bitrix_id or str(local_id)
         chunks = [
             "Я зарегистрировала обращение и передала его диспетчеру.",
-            f"Номер заявки: {local_id}.",
+            f"Номер заявки: {display_id}.",
         ]
-        if bitrix_id:
-            chunks.append(f"Номер в Bitrix24: {bitrix_id}.")
         chunks.append("Если понадобится, я напишу вам обновление по статусу.")
         return GeneratedResponse(
             text="\n".join(chunks),

@@ -19,9 +19,9 @@ def build_create_ticket_payload(
     payload_input: BitrixTicketPayloadInput,
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
-        "TITLE": payload_input.title,
+        settings.bitrix_field_title: payload_input.title,
         "SOURCE_ID": settings.bitrix_lead_source_id,
-        "COMMENTS": payload_input.description,
+        settings.bitrix_field_description: payload_input.description,
         "ASSIGNED_BY_ID": settings.bitrix_deal_assigned_by_id,
         settings.bitrix_field_jk: payload_input.jk or "",
         settings.bitrix_field_address: payload_input.address,
@@ -29,6 +29,7 @@ def build_create_ticket_payload(
         settings.bitrix_field_telegram_id: str(payload_input.telegram_id),
         settings.bitrix_field_local_report_id: str(payload_input.local_report_id),
     }
+    fields.update(_build_reporter_fields(payload_input.reporter_name))
 
     if payload_input.apartment:
         fields[settings.bitrix_field_apartment] = payload_input.apartment
@@ -42,6 +43,52 @@ def build_create_ticket_payload(
         fields["CONTACT_ID"] = payload_input.contact_id
 
     return {"fields": fields}
+
+
+def _build_reporter_fields(reporter_name: str | None) -> dict[str, str]:
+    parts = [part for part in str(reporter_name or "").strip().split() if part]
+    if not parts:
+        return {}
+    if len(parts) == 1:
+        return {"NAME": parts[0]}
+    if len(parts) == 2:
+        return {"NAME": parts[0], "LAST_NAME": parts[1]}
+    if len(parts) == 3 and _looks_like_patronymic(parts[2]):
+        return {
+            "LAST_NAME": parts[0],
+            "NAME": parts[1],
+            "SECOND_NAME": parts[2],
+        }
+    if len(parts) >= 3 and _looks_like_patronymic(parts[1]):
+        return {
+            "NAME": parts[0],
+            "SECOND_NAME": " ".join(parts[1:-1]),
+            "LAST_NAME": parts[-1],
+        }
+    return {
+        "NAME": parts[0],
+        "SECOND_NAME": " ".join(parts[1:-1]),
+        "LAST_NAME": parts[-1],
+    }
+
+
+def _looks_like_patronymic(value: str) -> bool:
+    normalized = value.strip().lower()
+    return normalized.endswith(
+        (
+            "ич",
+            "вич",
+            "евич",
+            "ович",
+            "евич",
+            "оглы",
+            "кызы",
+            "ична",
+            "вна",
+            "евна",
+            "овна",
+        )
+    )
 
 
 def build_add_comment_payload(payload_input: BitrixCommentPayloadInput) -> dict[str, Any]:

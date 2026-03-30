@@ -17,6 +17,7 @@ class BitrixTicketPayloadInput:
     telegram_id: int
     title: str
     description: str
+    reporter_name: str | None
     jk: str | None
     address: str
     category: str

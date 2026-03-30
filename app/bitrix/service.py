@@ -63,6 +63,7 @@ class BitrixTicketService:
             telegram_id=user.telegram_id,
             title=build_ticket_title(report),
             description=build_ticket_description(report),
+            reporter_name=user.name,
             jk=report.jk,
             address=report.address,
             category=report.category,

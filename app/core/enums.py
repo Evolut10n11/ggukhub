@@ -27,7 +27,7 @@ class BitrixSyncStatus(str, Enum):
 
 
 _REPORT_STATUS_LABELS: dict[str, str] = {
-    "new": "Новая заявка",
+    "new": "Принята",
     "in_progress": "В работе",
     "closed": "Закрыта",
     "done": "Выполнена",

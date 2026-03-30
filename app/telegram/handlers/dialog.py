@@ -26,8 +26,14 @@ logger = logging.getLogger(__name__)
 router = Router(name="dialog")
 
 
+_cached_dialog_service: DialogService | None = None
+
+
 def _dialog_service(services: AppServices) -> DialogService:
-    return DialogService(services)
+    global _cached_dialog_service
+    if _cached_dialog_service is None:
+        _cached_dialog_service = DialogService(services)
+    return _cached_dialog_service
 
 
 def _name_from_message(message: Message) -> str | None:

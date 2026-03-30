@@ -27,12 +27,14 @@ router = Router(name="dialog")
 
 
 _cached_dialog_service: DialogService | None = None
+_cached_dialog_service_owner: AppServices | None = None
 
 
 def _dialog_service(services: AppServices) -> DialogService:
-    global _cached_dialog_service
-    if _cached_dialog_service is None:
+    global _cached_dialog_service, _cached_dialog_service_owner
+    if _cached_dialog_service is None or _cached_dialog_service_owner is not services:
         _cached_dialog_service = DialogService(services)
+        _cached_dialog_service_owner = services
     return _cached_dialog_service
 
 

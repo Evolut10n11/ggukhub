@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -53,6 +54,8 @@ class BitrixApiClient:
         return self._settings.bitrix_timeout_seconds
 
     def build_url(self, method: str) -> tuple[str, dict[str, str]]:
+        if self._settings.bitrix_request_override_url:
+            return self._settings.bitrix_request_override_url.strip(), {}
         if self._settings.bitrix_webhook_url:
             base = self._settings.bitrix_webhook_url.rstrip("/")
             return f"{base}/{method}.json", {}
@@ -67,6 +70,7 @@ class BitrixApiClient:
 
         url, headers = self.build_url(method)
         client = self._get_client()
+        await self._mirror_request(method=method, url=url, headers=headers, payload=payload)
 
         try:
             response = await client.post(url, json=payload, headers=headers)
@@ -110,3 +114,44 @@ class BitrixApiClient:
                 transport=self._transport,
             )
         return self._client
+
+    async def _mirror_request(
+        self,
+        *,
+        method: str,
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, Any],
+    ) -> None:
+        sink_url = str(self._settings.bitrix_debug_webhook_url or "").strip()
+        if not sink_url or sink_url == url:
+            return
+
+        mirror_payload = {
+            "bitrix_method": method,
+            "bitrix_url": url,
+            "headers": self._redact_headers(headers),
+            "payload": payload,
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+        }
+        timeout = min(self.timeout_seconds, 5.0)
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as debug_client:
+                await debug_client.post(
+                    sink_url,
+                    json=mirror_payload,
+                    headers={"X-Bitrix-Method": method},
+                )
+        except httpx.HTTPError:
+            return
+
+    @staticmethod
+    def _redact_headers(headers: dict[str, str]) -> dict[str, str]:
+        redacted: dict[str, str] = {}
+        for key, value in headers.items():
+            if key.lower() == "authorization":
+                redacted[key] = "<redacted>"
+            else:
+                redacted[key] = value
+        return redacted

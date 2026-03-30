@@ -192,7 +192,7 @@ class DialogReportFinalizer:
             budget_ms=int(timeout_seconds * 1000),
         )
         try:
-            contact_id = await self._resolve_contact(user)
+            contact_id = await self._resolve_contact(user=user, report=report)
             bitrix_id = await self._bitrix_service.create_ticket(
                 report=report, user=user, contact_id=contact_id
             )
@@ -306,15 +306,24 @@ class DialogReportFinalizer:
             "bitrix_sync_outcome": "queued" if self._bitrix_service.enabled else "disabled",
         }
 
-    async def _resolve_contact(self, user: User) -> str | None:
-        phone = user.phone or ""
+    async def _resolve_contact(self, *, user: User, report: Report) -> str | None:
+        phone = str(report.phone or user.phone or "").strip()
         if not phone:
             return None
+        if user.bitrix_contact_id and str(user.phone or "").strip() == phone:
+            return user.bitrix_contact_id
         contact_id = await self._bitrix_service.find_contact_by_phone(phone)
         if contact_id:
+            if str(user.phone or "").strip() == phone:
+                await self._storage.update_user_bitrix_contact_id(user.id, contact_id)
+                user.bitrix_contact_id = contact_id
             return contact_id
         display_name = user.name or f"Telegram {user.telegram_id}"
-        return await self._bitrix_service.create_contact(name=display_name, phone=phone)
+        created_contact_id = await self._bitrix_service.create_contact(name=display_name, phone=phone)
+        if created_contact_id and str(user.phone or "").strip() == phone:
+            await self._storage.update_user_bitrix_contact_id(user.id, created_contact_id)
+            user.bitrix_contact_id = created_contact_id
+        return created_contact_id
 
     async def _check_report_limits(self, draft: FinalizedReportDraft) -> None:
         if draft.phone in _TEST_PHONES:

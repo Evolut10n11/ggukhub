@@ -20,7 +20,7 @@ def build_create_ticket_payload(
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
         "TITLE": payload_input.title,
-        "SOURCE_ID": settings.bitrix_deal_source_id,
+        "SOURCE_ID": settings.bitrix_lead_source_id,
         "COMMENTS": payload_input.description,
         "ASSIGNED_BY_ID": settings.bitrix_deal_assigned_by_id,
         settings.bitrix_field_jk: payload_input.jk or "",

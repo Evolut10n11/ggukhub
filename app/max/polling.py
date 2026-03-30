@@ -35,6 +35,14 @@ class MaxPolling:
         me = await self._client.get_me()
         bot_name = me.get("name", me.get("username", "MAX Bot"))
         logger.info("MAX bot started: %s", bot_name)
+        try:
+            await self._client.set_commands([
+                {"name": "start", "description": "Начать работу с ботом"},
+                {"name": "new", "description": "Создать новую заявку"},
+                {"name": "status", "description": "Статус последней заявки"},
+            ])
+        except Exception:
+            logger.warning("Failed to register MAX bot commands", exc_info=True)
         self._running = True
         while self._running:
             try:
@@ -125,11 +133,17 @@ class MaxPolling:
 
         logger.info("MAX message from user=%s chat=%s text=%r", user_id, chat_id, text[:100])
 
-        # Handle /start
+        # Handle commands
         if text.lower() in ("/start", "/new"):
             transport = self._make_transport(chat_id, user_id, display_name)
             service = self._get_dialog_service()
             await service.start(transport, include_welcome=(text.lower() == "/start"))
+            return
+
+        if text.lower() == "/status":
+            transport = self._make_transport(chat_id, user_id, display_name)
+            service = self._get_dialog_service()
+            await service.process_text(transport, "Статус заявки")
             return
 
         # Regular text

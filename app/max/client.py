@@ -78,6 +78,9 @@ class MaxBotClient:
         # Files come with a 'url' field in the attachment payload.
         return None
 
+    async def set_commands(self, commands: list[dict[str, str]]) -> dict[str, Any]:
+        return await self._patch("me", json={"commands": commands})
+
     # ── HTTP helpers ──
 
     async def _get(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -93,6 +96,11 @@ class MaxBotClient:
     async def _put(self, path: str, *, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None) -> dict[str, Any]:
         client = await self._get_client()
         resp = await client.put(f"/{path}", params=params, json=json)
+        return self._handle_response(resp)
+
+    async def _patch(self, path: str, *, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None) -> dict[str, Any]:
+        client = await self._get_client()
+        resp = await client.patch(f"/{path}", params=params, json=json)
         return self._handle_response(resp)
 
     @staticmethod

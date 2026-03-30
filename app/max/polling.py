@@ -244,6 +244,10 @@ class MaxPolling:
             await service.request_new_phone(transport)
         elif payload == "new_report":
             await service.start(transport, include_welcome=True)
+        elif payload == "back_to_menu":
+            await service.start(transport, include_welcome=True)
+        elif payload == "back_to_menu_status":
+            await service.process_text(transport, "Статус заявки")
 
     def _make_transport(self, chat_id: int, user_id: int, display_name: str | None) -> DialogTransport:
         client = self._client

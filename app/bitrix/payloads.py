@@ -29,7 +29,20 @@ def build_create_ticket_payload(
         "COMMENTS": payload_input.description,
         "ASSIGNED_BY_ID": settings.bitrix_deal_assigned_by_id,
         "SOURCE_DESCRIPTION": "",
+        settings.bitrix_field_jk: payload_input.jk or "",
+        settings.bitrix_field_address: payload_input.address,
+        settings.bitrix_field_category: payload_input.category,
+        settings.bitrix_field_telegram_id: str(payload_input.telegram_id),
+        settings.bitrix_field_local_report_id: str(payload_input.local_report_id),
     }
+
+    if payload_input.apartment:
+        fields[settings.bitrix_field_apartment] = payload_input.apartment
+
+    if payload_input.phone:
+        fields[settings.bitrix_field_phone] = [
+            {"VALUE": payload_input.phone, "VALUE_TYPE": "WORK"},
+        ]
 
     if payload_input.contact_id:
         fields["CONTACT_ID"] = payload_input.contact_id

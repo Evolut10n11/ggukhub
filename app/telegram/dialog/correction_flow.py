@@ -35,7 +35,7 @@ class DialogCorrectionFlow:
         extracted: ExtractedReportContext,
         text: str,
     ) -> CorrectionUpdate:
-        updated = data.model_copy(deep=True)
+        updated = data.model_copy()
         if extracted.jk:
             updated.jk = extracted.jk
         if extracted.house:

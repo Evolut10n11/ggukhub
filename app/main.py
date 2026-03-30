@@ -83,7 +83,7 @@ def _register_routes(app: FastAPI) -> None:
             await runtime.services.storage.health_check()
             db_ok = True
         except Exception:
-            pass
+            logger.warning("Health check DB error", exc_info=True)
         status = "ok" if db_ok else "degraded"
         return {
             "status": status,

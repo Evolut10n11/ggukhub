@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from app.bitrix.client import BitrixApiClient, BitrixClientError
+from app.core.enums import report_status_label
 from app.bitrix.formatters import build_ticket_description, build_ticket_title
 from app.bitrix.models import (
     BitrixCommentPayloadInput,
@@ -302,7 +303,7 @@ class BitrixWebhookService:
             report, user = report_with_user
             notified = await self._notifier.send_message(
                 telegram_id=user.telegram_id,
-                text=f"Ваша заявка №{report.id} обновлена: {parsed.status}",
+                text=f"Ваша заявка №{report.id} обновлена.\nСтатус: {report_status_label(parsed.status)}",
             )
 
         return BitrixWebhookResult(

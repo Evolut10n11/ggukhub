@@ -109,7 +109,7 @@ class DialogService:
             if snapshot.step != DialogStep.AWAITING_JK:
                 await transport.send_text(_STALE_CALLBACK_TEXT, None)
                 return
-            data = snapshot.data.model_copy(deep=True)
+            data = snapshot.data.model_copy()
             data.jk = complex_name
 
             houses = self._registry.houses_for_complex(complex_name)
@@ -146,7 +146,7 @@ class DialogService:
             if snapshot.step != DialogStep.AWAITING_JK:
                 await transport.send_text(_STALE_CALLBACK_TEXT, None)
                 return
-            data = snapshot.data.model_copy(deep=True)
+            data = snapshot.data.model_copy()
             data.jk = STANDALONE_JK_MARKER
             houses = self._registry.standalone_houses
             if not houses:
@@ -177,7 +177,7 @@ class DialogService:
             if snapshot.step != DialogStep.AWAITING_HOUSE:
                 await transport.send_text(_STALE_CALLBACK_TEXT, None)
                 return
-            data = snapshot.data.model_copy(deep=True)
+            data = snapshot.data.model_copy()
             houses = self._get_current_house_list(data)
             if index < 0 or index >= len(houses):
                 await transport.send_text("Дом не найден. Выберите из списка.", self._kb.house_keyboard(houses, 0))
@@ -207,7 +207,7 @@ class DialogService:
             if snapshot.step != DialogStep.AWAITING_ENTRANCE:
                 await transport.send_text(_STALE_CALLBACK_TEXT, None)
                 return
-            data = snapshot.data.model_copy(deep=True)
+            data = snapshot.data.model_copy()
             house_info = self._registry.find_house(str(data.house or ""))
             if house_info and entrance.isdigit():
                 n = int(entrance)
@@ -228,7 +228,7 @@ class DialogService:
             if snapshot.step != DialogStep.AWAITING_JK:
                 await transport.send_text(_STALE_CALLBACK_TEXT, None)
                 return
-            data = snapshot.data.model_copy(deep=True)
+            data = snapshot.data.model_copy()
             data.jk = UNKNOWN_JK_VALUE
             await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
             await transport.send_text(
@@ -244,7 +244,7 @@ class DialogService:
                 await transport.send_text(_STALE_CALLBACK_TEXT, None)
                 return
 
-            data = snapshot.data.model_copy(deep=True)
+            data = snapshot.data.model_copy()
             data.category = str(data.auto_category or "other")
             await transport.clear_inline_keyboard()
             await self._send_report_confirmation(transport, user.id, data)
@@ -276,7 +276,7 @@ class DialogService:
                 )
                 return
 
-            data = snapshot.data.model_copy(deep=True)
+            data = snapshot.data.model_copy()
             data.category = category
             await transport.clear_inline_keyboard()
             await self._send_report_confirmation(transport, user.id, data)
@@ -298,7 +298,7 @@ class DialogService:
                 )
                 return
 
-            data = snapshot.data.model_copy(deep=True)
+            data = snapshot.data.model_copy()
             data.phone = user.phone
             await self._continue_after_problem_capture(transport, user, data, from_voice=False)
 

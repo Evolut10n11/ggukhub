@@ -124,15 +124,15 @@ def build_report_summary(view: ReportSummaryView) -> str:
         if view.mc_emergency_phone:
             lines.append(f"Аварийный: {view.mc_emergency_phone}")
     if view.bitrix_id:
-        lines.append(f"Статус: создана (Bitrix24 №{view.bitrix_id})")
+        lines.append(f"Статус: создана (№{view.bitrix_id})")
     else:
         lines.append("Статус: создана")
     if bitrix_sync_outcome == "queued" and not view.bitrix_id:
-        lines.append("Bitrix24: передаю заявку, номер пришлю отдельным сообщением.")
+        lines.append("Передаю заявку, номер пришлю отдельным сообщением.")
     elif bitrix_sync_outcome == "failed":
-        lines.append("Bitrix24: не удалось передать автоматически, уточняю вручную.")
+        lines.append("Не удалось передать автоматически, уточняю вручную.")
     elif bitrix_sync_outcome == "disabled":
-        lines.append("Bitrix24: интеграция сейчас выключена.")
+        pass
     return "\n".join(lines)
 
 
@@ -162,10 +162,8 @@ def build_report_lookup_reply(view: ReportLookupView) -> str:
     ]
     if view.jk:
         lines.append(f"ЖК: {view.jk}")
-    if view.bitrix_id:
-        lines.append(f"Bitrix24: {view.bitrix_id}")
     if view.bitrix_status_label:
-        lines.append(f"Статус в Bitrix24: {view.bitrix_status_label}")
+        lines.append(f"Статус обработки: {view.bitrix_status_label}")
     if view.bitrix_date_modify:
         lines.append(f"Обновлена: {view.bitrix_date_modify}")
     if view.bitrix_comments:

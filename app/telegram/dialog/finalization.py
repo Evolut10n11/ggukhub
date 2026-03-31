@@ -261,7 +261,7 @@ class DialogReportFinalizer:
                     telegram_id=user.telegram_id,
                     text=(
                         f"Заявка №{report.id} уже сохранена. "
-                        "Передачу в Bitrix24 уточняю вручную и вернусь с обновлением."
+                        "Уточняю передачу вручную и вернусь с обновлением."
                     ),
                 )
             return None
@@ -283,10 +283,10 @@ class DialogReportFinalizer:
         logger.info("Bitrix ticket synced for report %s | %s", report.id, telemetry_payload)
 
         if is_mass_incident:
-            followup = f"Дополнительно: заявка №{report.id} передана в Bitrix24, номер {bitrix_id}."
+            followup = f"Дополнительно: заявка №{report.id} передана диспетчеру, номер {bitrix_id}."
             await self._bitrix_service.notify_managers_urgent(report)
         else:
-            followup = f"Заявка №{report.id} передана в Bitrix24. Номер в Bitrix24: {bitrix_id}."
+            followup = f"Заявка №{report.id} передана диспетчеру. Номер заявки: {bitrix_id}."
         if notify_user:
             await self._notifier.send_message(telegram_id=user.telegram_id, text=followup)
         return bitrix_id

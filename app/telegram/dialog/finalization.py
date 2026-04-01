@@ -31,8 +31,8 @@ from app.telegram.notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
-MAX_ACTIVE_REPORTS = 5
-_TEST_PHONES: set[str] = {"+79999999999"}
+MAX_ACTIVE_REPORTS = 10
+_TEST_PHONES: set[str] = {"+79999999999", "+76969696969"}
 
 
 class ReportLimitExceeded(RuntimeError):

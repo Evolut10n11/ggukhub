@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 _STALE_CALLBACK_TEXT = "Эта кнопка уже неактуальна. Напишите сообщение, и я продолжу оформление заявки."
 _PHONE_PROMPT_TEXT = "Укажите телефон для связи (например, +7XXXXXXXXXX)."
-_PROBLEM_PROMPT_TEXT = "Опишите, пожалуйста, проблему в 1-2 предложениях."
+_PROBLEM_PROMPT_TEXT = "Опишите, пожалуйста, проблему в 1-2 предложениях. Текстом или голосовым сообщением."
 _REPORT_CORRECTION_PROMPT = (
     "Напишите, что нужно исправить. Можно одним сообщением: адрес, телефон, описание проблемы "
     "или категорию. Потом я еще раз покажу сводку."
@@ -632,7 +632,7 @@ class DialogService:
             return
 
         await self._save_snapshot(user.id, DialogStep.AWAITING_PROBLEM, data)
-        await transport.send_text("Спасибо. Теперь коротко опишите проблему.", None)
+        await transport.send_text("Спасибо. Теперь коротко опишите проблему. Текстом или голосовым сообщением.", None)
 
     async def _handle_awaiting_problem(
         self,
@@ -881,7 +881,7 @@ class DialogService:
             WELCOME_TEXT
             if include_welcome
             else (
-                "Через меня можно быстро отправить заявку в диспетчерскую — текстом или голосом.\n\n"
+                "Через меня можно быстро отправить заявку в диспетчерскую.\n\n"
                 "Сначала выберите ваш жилой комплекс:"
             )
         )

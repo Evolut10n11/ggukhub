@@ -182,7 +182,7 @@ class MaxPolling:
 
     async def _send_jk_page(self, transport: DialogTransport, page: int) -> None:
         await transport.send_text(
-            "Через меня можно быстро отправить заявку в диспетчерскую — текстом или голосом.\n\n"
+            "Через меня можно быстро отправить заявку в диспетчерскую.\n\n"
             "Сначала выберите ваш жилой комплекс:",
             self._kb.jk_keyboard(self._services.building_registry.complex_names, page=page),
         )

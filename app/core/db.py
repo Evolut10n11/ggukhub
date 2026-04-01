@@ -58,8 +58,7 @@ class DatabaseRuntime:
         """Add new nullable columns to existing tables (poor-man's migration)."""
         from sqlalchemy import inspect, text
 
-        raw = getattr(conn, "connection", conn)
-        inspector = inspect(raw)
+        inspector = inspect(conn)
         existing = {c["name"] for c in inspector.get_columns("users")}
         new_columns = {
             "jk": "VARCHAR(255)",
@@ -69,7 +68,7 @@ class DatabaseRuntime:
         }
         for col, col_type in new_columns.items():
             if col not in existing:
-                raw.execute(text(f"ALTER TABLE users ADD COLUMN {col} {col_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {col_type}"))  # type: ignore[union-attr]
 
 
     async def close(self) -> None:

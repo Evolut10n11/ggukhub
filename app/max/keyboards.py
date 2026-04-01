@@ -125,6 +125,12 @@ class MaxKeyboardFactory:
             [_cb_button("Указать другой", "phone_reuse_other")],
         ])]
 
+    def address_reuse_keyboard(self) -> list[dict[str, Any]]:
+        return [_inline_keyboard_attachment([
+            [_cb_button("Да, адрес тот же", "address_reuse_yes")],
+            [_cb_button("Нет, другой адрес", "address_reuse_no")],
+        ])]
+
     def new_report_keyboard(self) -> list[dict[str, Any]]:
         return [_inline_keyboard_attachment([
             [_cb_button("📝 Создать ещё заявку", "new_report")],

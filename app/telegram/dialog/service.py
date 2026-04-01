@@ -99,6 +99,29 @@ class DialogService:
                     self._kb.jk_keyboard(self._registry.complex_names, page=0),
                 )
                 return
+
+            if user.house and user.apartment:
+                prefilled = DialogSessionData(
+                    jk=user.jk, house=user.house, entrance=user.entrance, apartment=user.apartment,
+                )
+                await self._save_snapshot(user.id, DialogStep.AWAITING_ADDRESS_REUSE_CONFIRM, prefilled)
+                address_parts = [f"Дом: {user.house}"]
+                if user.entrance:
+                    address_parts.append(f"Подъезд: {user.entrance}")
+                address_parts.append(f"Квартира: {user.apartment}")
+                if user.jk:
+                    address_parts.insert(0, f"ЖК: {user.jk}")
+                address_summary = "\n".join(address_parts)
+                if include_welcome:
+                    greeting = "Здравствуйте!\n\n"
+                else:
+                    greeting = ""
+                await transport.send_text(
+                    f"{greeting}В прошлый раз вы указали адрес:\n{address_summary}\n\nИспользовать его для новой заявки?",
+                    self._kb.address_reuse_keyboard(),
+                )
+                return
+
             await self._save_snapshot(user.id, DialogStep.AWAITING_JK, DialogSessionData())
             await self._send_onboarding(transport, include_welcome=include_welcome)
 
@@ -159,6 +182,15 @@ class DialogService:
                 "Выберите ваш дом:",
                 self._kb.house_keyboard(houses, page=0),
             )
+
+    async def get_house_list_for_user(self, platform_user_id: int) -> list[Any] | None:
+        user = await self._deps.storage.get_user_by_telegram_id(platform_user_id)
+        if not user:
+            return None
+        snapshot = await self._load_snapshot(user.id)
+        if snapshot.step != DialogStep.AWAITING_HOUSE:
+            return None
+        return self._get_current_house_list(snapshot.data)
 
     async def paginate_houses(self, transport: DialogTransport, page: int) -> None:
         user = await self._upsert_user(transport.platform_user_id, transport.display_name)
@@ -314,6 +346,28 @@ class DialogService:
             await transport.clear_inline_keyboard()
             await transport.send_text(_PHONE_PROMPT_TEXT, None)
 
+    async def confirm_saved_address(self, transport: DialogTransport) -> None:
+        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step != DialogStep.AWAITING_ADDRESS_REUSE_CONFIRM:
+                await transport.send_text(_STALE_CALLBACK_TEXT, None)
+                return
+            await transport.clear_inline_keyboard()
+            await self._save_snapshot(user.id, DialogStep.AWAITING_PROBLEM, snapshot.data)
+            await transport.send_text(_PROBLEM_PROMPT_TEXT, None)
+
+    async def reject_saved_address(self, transport: DialogTransport) -> None:
+        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step != DialogStep.AWAITING_ADDRESS_REUSE_CONFIRM:
+                await transport.send_text(_STALE_CALLBACK_TEXT, None)
+                return
+            await self._save_snapshot(user.id, DialogStep.AWAITING_JK, DialogSessionData())
+            await transport.clear_inline_keyboard()
+            await self._send_onboarding(transport, include_welcome=False)
+
     async def confirm_report(self, transport: DialogTransport) -> None:
         user = await self._upsert_user(transport.platform_user_id, transport.display_name)
         async with self._runtime.user_lock(user.id):
@@ -412,6 +466,7 @@ class DialogService:
                 DialogStep.AWAITING_CATEGORY_SELECT: self._handle_awaiting_category_select,
                 DialogStep.AWAITING_REPORT_CONFIRM: self._handle_awaiting_report_confirm,
                 DialogStep.AWAITING_REPORT_CORRECTION: self._handle_awaiting_report_correction,
+                DialogStep.AWAITING_ADDRESS_REUSE_CONFIRM: self._handle_awaiting_address_reuse_confirm,
             }
             handler = step_handlers.get(snapshot.step)
             if handler is None:
@@ -694,6 +749,27 @@ class DialogService:
         await transport.send_text(
             build_saved_phone_prompt(user.phone),
             self._kb.phone_reuse_keyboard(str(user.phone or "")),
+        )
+
+    async def _handle_awaiting_address_reuse_confirm(
+        self,
+        *,
+        transport: DialogTransport,
+        user: User,
+        text: str,
+        data: DialogSessionData,
+        extracted: ExtractedReportContext,
+        from_voice: bool,
+    ) -> None:
+        if is_yes_text(text):
+            await self.confirm_saved_address(transport)
+            return
+        if is_no_or_other_text(text):
+            await self.reject_saved_address(transport)
+            return
+        await transport.send_text(
+            "Используем сохранённый адрес? Нажмите «Да» или «Нет».",
+            self._kb.address_reuse_keyboard(),
         )
 
     async def _handle_awaiting_category_confirm(
@@ -980,6 +1056,13 @@ class DialogService:
         except ReportLimitExceeded as exc:
             await transport.send_text(f"⚠ Не удалось создать заявку: {exc.reason}", None)
             return
+        await self._deps.storage.update_user_address(
+            user.id,
+            jk=data.jk,
+            house=data.house,
+            entrance=data.entrance,
+            apartment=data.apartment,
+        )
         reply_text = result.reply_text
         if self._deps.bitrix_service.enabled:
             bitrix_id = await self._report_finalizer.sync_bitrix_ticket(

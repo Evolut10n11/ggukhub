@@ -187,6 +187,22 @@ class MaxPolling:
             self._kb.jk_keyboard(self._services.building_registry.complex_names, page=page),
         )
 
+    async def _edit_jk_page(self, message_id: str, page: int) -> None:
+        text = (
+            "Через меня можно быстро отправить заявку в диспетчерскую.\n\n"
+            "Сначала выберите ваш жилой комплекс:"
+        )
+        attachments = self._kb.jk_keyboard(self._services.building_registry.complex_names, page=page)
+        await self._client.edit_message(message_id, text, attachments=attachments)
+
+    async def _edit_house_page(self, message_id: str, user_id: int, page: int) -> None:
+        service = self._get_dialog_service()
+        houses = await service.get_house_list_for_user(user_id)
+        if houses is None:
+            return
+        attachments = self._kb.house_keyboard(houses, page=page)
+        await self._client.edit_message(message_id, "Выберите дом:", attachments=attachments)
+
     async def _handle_callback(self, update: dict[str, Any]) -> None:
         callback = update.get("callback", {})
         callback_id = callback.get("callback_id")
@@ -219,7 +235,11 @@ class MaxPolling:
         elif payload.startswith("jk_page:"):
             page_str = payload.split(":", 1)[1]
             if page_str != "stay":
-                await self._send_jk_page(transport, int(page_str))
+                mid = message.get("body", {}).get("mid")
+                if mid:
+                    await self._edit_jk_page(mid, int(page_str))
+                else:
+                    await self._send_jk_page(transport, int(page_str))
         elif payload == "jk_standalone":
             await service.show_standalone_houses(transport)
         elif payload == "jk_unknown":
@@ -230,7 +250,11 @@ class MaxPolling:
         elif payload.startswith("house_p:"):
             page_str = payload.split(":", 1)[1]
             if page_str != "stay":
-                await service.paginate_houses(transport, int(page_str))
+                mid = message.get("body", {}).get("mid")
+                if mid:
+                    await self._edit_house_page(mid, user_id, int(page_str))
+                else:
+                    await service.paginate_houses(transport, int(page_str))
         elif payload.startswith("ent:"):
             entrance = payload.split(":", 1)[1]
             await service.select_entrance(transport, entrance)
@@ -249,6 +273,10 @@ class MaxPolling:
             await service.confirm_saved_phone(transport)
         elif payload == "phone_reuse_other":
             await service.request_new_phone(transport)
+        elif payload == "address_reuse_yes":
+            await service.confirm_saved_address(transport)
+        elif payload == "address_reuse_no":
+            await service.reject_saved_address(transport)
         elif payload == "new_report":
             await service.start(transport, include_welcome=True)
         elif payload == "back_to_menu":

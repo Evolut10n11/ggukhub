@@ -338,6 +338,22 @@ async def phone_reuse_other_handler(callback: CallbackQuery, services: AppServic
     await _dialog_service(services).request_new_phone(_callback_transport(callback))
 
 
+@router.callback_query(F.data == "address_reuse_yes")
+async def address_reuse_yes_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).confirm_saved_address(_callback_transport(callback))
+
+
+@router.callback_query(F.data == "address_reuse_no")
+async def address_reuse_no_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).reject_saved_address(_callback_transport(callback))
+
+
 @router.callback_query()
 async def callback_fallback_handler(callback: CallbackQuery) -> None:
     await _ack_callback(callback, "Кнопка устарела. Напишите сообщение, и я продолжу.", show_alert=True)

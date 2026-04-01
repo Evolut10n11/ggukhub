@@ -51,6 +51,26 @@ class DatabaseRuntime:
     async def init(self) -> None:
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(self._add_missing_columns)
+
+    @staticmethod
+    def _add_missing_columns(conn: object) -> None:
+        """Add new nullable columns to existing tables (poor-man's migration)."""
+        from sqlalchemy import inspect, text
+
+        raw = getattr(conn, "connection", conn)
+        inspector = inspect(raw)
+        existing = {c["name"] for c in inspector.get_columns("users")}
+        new_columns = {
+            "jk": "VARCHAR(255)",
+            "house": "VARCHAR(255)",
+            "entrance": "VARCHAR(32)",
+            "apartment": "VARCHAR(64)",
+        }
+        for col, col_type in new_columns.items():
+            if col not in existing:
+                raw.execute(text(f"ALTER TABLE users ADD COLUMN {col} {col_type}"))
+
 
     async def close(self) -> None:
         await self.engine.dispose()

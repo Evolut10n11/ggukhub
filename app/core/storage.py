@@ -59,6 +59,26 @@ class Storage:
                 user.phone = phone
                 await session.commit()
 
+    async def update_user_address(
+        self,
+        user_id: int,
+        *,
+        jk: str | None,
+        house: str | None,
+        entrance: str | None,
+        apartment: str | None,
+    ) -> None:
+        async with self._session_factory() as session:
+            stmt: Select[tuple[User]] = select(User).where(User.id == user_id)
+            result = await session.execute(stmt)
+            user = result.scalar_one_or_none()
+            if user:
+                user.jk = jk
+                user.house = house
+                user.entrance = entrance
+                user.apartment = apartment
+                await session.commit()
+
     async def update_user_bitrix_contact_id(self, user_id: int, contact_id: str) -> None:
         async with self._session_factory() as session:
             stmt: Select[tuple[User]] = select(User).where(User.id == user_id)

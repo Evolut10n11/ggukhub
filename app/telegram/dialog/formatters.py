@@ -191,5 +191,8 @@ def build_resume_prompt(step: DialogStep) -> str | None:
         DialogStep.AWAITING_REPORT_CORRECTION: (
             "Черновик новой заявки сохранила. Чтобы продолжить, напишите, что нужно исправить."
         ),
+        DialogStep.AWAITING_ADDRESS_REUSE_CONFIRM: (
+            "Черновик новой заявки сохранила. Чтобы продолжить, подтвердите или измените адрес."
+        ),
     }
     return prompts.get(step)

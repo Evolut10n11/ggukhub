@@ -44,7 +44,8 @@ async def _run_api_server(app, settings: Settings, stop_event: asyncio.Event) ->
 async def _run_polling(runtime, stop_event: asyncio.Event) -> None:
     settings = runtime.services.settings
     if not settings.telegram_bot_token:
-        raise RuntimeError("TELEGRAM_BOT_TOKEN is required for polling mode")
+        logger.info("TELEGRAM_BOT_TOKEN not set, Telegram polling disabled")
+        return
 
     bot = create_bot(settings.telegram_bot_token)
     dispatcher = create_dispatcher(runtime.services)
@@ -115,9 +116,11 @@ async def _main() -> None:
 
             if settings.telegram_use_webhook:
                 logger.info("TELEGRAM_USE_WEBHOOK=true, stack runner starts API only")
-            else:
+            elif settings.telegram_bot_token:
                 polling_task = asyncio.create_task(_run_polling(runtime, stop_event))
                 tasks.add(polling_task)
+            else:
+                logger.info("TELEGRAM_BOT_TOKEN not set, Telegram bot disabled")
 
             if settings.max_enabled:
                 max_task = asyncio.create_task(_run_max_polling(runtime, stop_event))

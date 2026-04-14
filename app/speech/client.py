@@ -108,7 +108,8 @@ class SpeechToTextClient:
                 ) from error
 
             try:
-                self._local_model = WhisperModel(
+                self._local_model = await asyncio.to_thread(
+                    WhisperModel,
                     self._settings.speech_model,
                     device=self._settings.speech_device,
                     compute_type=self._settings.speech_compute_type,

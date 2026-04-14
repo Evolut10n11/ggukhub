@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from dataclasses import dataclass
+from contextlib import suppress
+from dataclasses import dataclass, field
 
 from app.config import Settings, get_settings
 from app.core.bootstrap import build_runtime
@@ -16,11 +18,12 @@ class AppRuntime:
     settings: Settings
     db: DatabaseRuntime
     services: AppServices
+    _speech_warmup_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
 
     async def init(self) -> None:
         await self.db.init()
         await self._validate_bitrix_fields()
-        await self._warm_up_speech()
+        self._start_speech_warm_up()
 
     async def _validate_bitrix_fields(self) -> None:
         if not self.services.bitrix_service.enabled:
@@ -34,6 +37,14 @@ class AppRuntime:
         except Exception as exc:
             logger.warning("Bitrix field validation skipped: %s", exc)
 
+    def _start_speech_warm_up(self) -> None:
+        if self._speech_warmup_task is not None:
+            return
+        if not hasattr(self.services.speech, "warm_up"):
+            return
+        self._speech_warmup_task = asyncio.create_task(self._warm_up_speech())
+        logger.info("Speech warm-up scheduled in background")
+
     async def _warm_up_speech(self) -> None:
         if hasattr(self.services.speech, "warm_up"):
             try:
@@ -41,8 +52,14 @@ class AppRuntime:
                 logger.info("Speech model pre-loaded")
             except Exception as exc:
                 logger.warning("Speech warm-up failed: %s", exc)
+            finally:
+                self._speech_warmup_task = None
 
     async def close(self) -> None:
+        if self._speech_warmup_task is not None:
+            self._speech_warmup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._speech_warmup_task
         if self.services.max_operator_service is not None:
             await self.services.max_operator_service.close()
         if hasattr(self.services.speech, "close"):

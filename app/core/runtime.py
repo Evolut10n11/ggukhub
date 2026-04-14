@@ -42,6 +42,9 @@ class AppRuntime:
             return
         if not hasattr(self.services.speech, "warm_up"):
             return
+        if self.settings.speech_enabled and self.settings.speech_base_url.strip().lower().startswith("local://"):
+            logger.info("Speech warm-up skipped at startup for local mode")
+            return
         self._speech_warmup_task = asyncio.create_task(self._warm_up_speech())
         logger.info("Speech warm-up scheduled in background")
 

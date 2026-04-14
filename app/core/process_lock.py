@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import atexit
 import os
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-BOT_LOCK_FILE = Path("var/run/bot.lock")
+BOT_LOCK_FILE = Path(tempfile.gettempdir()) / "green-garden-bot.lock"
 
 
 def _is_process_alive(pid: int) -> bool:

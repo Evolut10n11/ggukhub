@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 from app.core.enums import IncidentStatus, ReportStatus, is_active_report_status
 from app.core.models import BitrixEvent, Incident, IncidentEvent, Report, ReportAuditLog, SessionState, User
 from app.core.schemas import ReportAuditCreate, ReportCreate, ReportLookupResult, SessionPayload
-from app.core.utils import dump_json
+from app.core.utils import dump_json, normalize_phone
 
 TELEGRAM_PLATFORM = "telegram"
 MAX_PLATFORM = "max"
@@ -95,6 +95,18 @@ class Storage:
             stmt: Select[tuple[User]] = select(User).where(User.id == user_id)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
+
+    async def list_users_by_phone_numbers(self, *, platform: str, phones: set[str]) -> list[User]:
+        normalized_platform = _normalize_platform(platform)
+        normalized_phones = {normalize_phone(phone) for phone in phones if phone.strip()}
+        normalized_phones.discard(None)
+        if not normalized_phones:
+            return []
+        async with self._session_factory() as session:
+            stmt: Select[tuple[User]] = select(User).where(User.messenger_platform == normalized_platform)
+            result = await session.execute(stmt)
+            users = list(result.scalars().all())
+            return [user for user in users if normalize_phone(user.phone or "") in normalized_phones]
 
     async def update_user_phone(self, user_id: int, phone: str) -> None:
         async with self._session_factory() as session:

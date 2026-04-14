@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from typing import Any
 
@@ -33,6 +34,13 @@ class MaxPolling:
 
     def _get_operator_service(self):
         return getattr(self._services, "max_operator_service", None)
+
+    @staticmethod
+    async def _is_operator(operator_service: Any, user_id: int) -> bool:
+        verdict = operator_service.is_operator(user_id)
+        if inspect.isawaitable(verdict):
+            verdict = await verdict
+        return bool(verdict)
 
     async def start(self) -> None:
         me = await self._client.get_me()
@@ -102,7 +110,7 @@ class MaxPolling:
         display_name = user.get("name")
         logger.info("MAX bot_started from user=%s chat=%s", user_id, chat_id)
         operator_service = self._get_operator_service()
-        if operator_service is not None and operator_service.is_operator(user_id):
+        if operator_service is not None and await self._is_operator(operator_service, user_id):
             await self._client.send_message(
                 chat_id,
                 "Режим оператора активен. Напишите /queue, чтобы увидеть открытые заявки. Чтобы узнать свой MAX user_id, отправьте /id.",

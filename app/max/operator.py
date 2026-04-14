@@ -8,6 +8,7 @@ from app.core.enums import ReportStatus, report_status_label
 from app.core.models import Report, User
 from app.core.notifier import UserNotifier
 from app.core.storage import Storage
+from app.core.utils import normalize_phone
 from app.max.client import MaxBotClient
 from app.max.keyboards import MaxKeyboardFactory
 
@@ -25,8 +26,10 @@ class MaxOperatorService:
         self._settings = settings
         self._storage = storage
         self._notifier = notifier
+        self._operator_phones = _parse_operator_phones(settings.max_operator_phones)
         self._operator_ids = _parse_operator_ids(settings.max_operator_user_ids)
-        self._client = MaxBotClient(settings) if settings.max_enabled and self._operator_ids else None
+        has_operator_targets = bool(self._operator_ids or self._operator_phones)
+        self._client = MaxBotClient(settings) if settings.max_enabled and has_operator_targets else None
         self._kb = MaxKeyboardFactory()
         self._pending: dict[int, OperatorPendingAction] = {}
 
@@ -34,8 +37,15 @@ class MaxOperatorService:
     def enabled(self) -> bool:
         return self._client is not None
 
-    def is_operator(self, user_id: int) -> bool:
-        return user_id in self._operator_ids
+    async def is_operator(self, user_id: int) -> bool:
+        if user_id in self._operator_ids:
+            return True
+        if not self._operator_phones:
+            return False
+        user = await self._storage.get_user_by_platform_id(platform="max", platform_user_id=user_id)
+        if user is None:
+            return False
+        return _normalize_stored_phone(user.phone) in self._operator_phones
 
     async def close(self) -> None:
         if self._client is not None:
@@ -46,17 +56,24 @@ class MaxOperatorService:
             return
         text = self._build_new_report_text(report, user)
         attachments = self._kb.operator_report_keyboard(report.id)
-        for operator_id in self._operator_ids:
+        operator_ids = await self._resolve_operator_recipient_ids()
+        if not operator_ids:
+            logger.warning("MAX operator recipients are not configured or not linked to saved phones")
+            return
+        for operator_id in operator_ids:
             try:
                 await self._client.send_direct_message(operator_id, text, attachments=attachments)  # type: ignore[union-attr]
             except Exception:
                 logger.warning("Failed to notify MAX operator %s about report %s", operator_id, report.id, exc_info=True)
 
     async def handle_operator_message(self, chat_id: int, user_id: int, text: str) -> bool:
-        if not self.is_operator(user_id):
+        stripped = text.strip()
+        if not await self.is_operator(user_id):
+            activated = await self._activate_operator_by_phone(chat_id, user_id, stripped)
+            if activated:
+                return True
             return False
 
-        stripped = text.strip()
         pending = self._pending.get(user_id)
         if pending is not None and stripped and not stripped.startswith("/"):
             self._pending.pop(user_id, None)
@@ -99,7 +116,7 @@ class MaxOperatorService:
         return True
 
     async def handle_operator_callback(self, chat_id: int, user_id: int, payload: str) -> bool:
-        if not self.is_operator(user_id):
+        if not await self.is_operator(user_id):
             return False
         if payload.startswith("op_take:"):
             await self._take_report(chat_id, int(payload.split(":", 1)[1]))
@@ -185,6 +202,33 @@ class MaxOperatorService:
             return
         await self._client.send_message(chat_id, text)  # type: ignore[union-attr]
 
+    async def _activate_operator_by_phone(self, chat_id: int, user_id: int, text: str) -> bool:
+        if not self._operator_phones:
+            return False
+        normalized_phone = _normalize_stored_phone(text)
+        if normalized_phone not in self._operator_phones:
+            return False
+        user = await self._storage.upsert_platform_user(
+            platform="max",
+            platform_user_id=user_id,
+            name=None,
+            platform_chat_id=chat_id,
+        )
+        await self._storage.update_user_phone(user.id, normalized_phone)
+        await self._send_chat_message(
+            chat_id,
+            "Режим оператора активирован по номеру телефона. Теперь доступны /queue, /take, /reply и /close.",
+        )
+        await self._send_help(chat_id)
+        return True
+
+    async def _resolve_operator_recipient_ids(self) -> set[int]:
+        operator_ids = set(self._operator_ids)
+        if self._operator_phones:
+            users = await self._storage.list_users_by_phone_numbers(platform="max", phones=self._operator_phones)
+            operator_ids.update(user.platform_user_id for user in users if user.platform == "max")
+        return operator_ids
+
     @staticmethod
     def _build_new_report_text(report: Report, user: User) -> str:
         lines = [
@@ -204,6 +248,21 @@ class MaxOperatorService:
 
 def _parse_operator_ids(raw: str) -> set[int]:
     return {int(value.strip()) for value in raw.split(",") if value.strip().isdigit()}
+
+
+def _parse_operator_phones(raw: str) -> set[str]:
+    phones: set[str] = set()
+    for value in raw.split(","):
+        normalized = normalize_phone(value.strip())
+        if normalized:
+            phones.add(normalized)
+    return phones
+
+
+def _normalize_stored_phone(value: str | None) -> str | None:
+    if not value:
+        return None
+    return normalize_phone(value)
 
 
 def _parse_operator_command(text: str) -> tuple[str, int | None, str | None]:

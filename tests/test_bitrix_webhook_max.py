@@ -55,7 +55,7 @@ async def test_max_operator_service_notifies_operator_about_new_report(tmp_path:
         Settings(
             telegram_bot_token="123456:TEST",
             max_bot_token="max-token",
-            max_operator_user_ids="9001,9002",
+            max_operator_phones="+79955406640,+79955406641",
         ),
         storage,
         notifier,
@@ -63,6 +63,21 @@ async def test_max_operator_service_notifies_operator_about_new_report(tmp_path:
     service._client = _MaxClientStub()  # type: ignore[assignment]
 
     try:
+        operator_one = await storage.upsert_platform_user(
+            platform="max",
+            platform_user_id=9001,
+            platform_chat_id=91001,
+            name="Operator One",
+        )
+        operator_two = await storage.upsert_platform_user(
+            platform="max",
+            platform_user_id=9002,
+            platform_chat_id=91002,
+            name="Operator Two",
+        )
+        await storage.update_user_phone(operator_one.id, "+79955406640")
+        await storage.update_user_phone(operator_two.id, "89955406641")
+
         user = await storage.upsert_platform_user(
             platform="max",
             platform_user_id=7001,
@@ -112,7 +127,7 @@ async def test_max_operator_service_replies_and_closes_report(tmp_path: Path) ->
         Settings(
             telegram_bot_token="123456:TEST",
             max_bot_token="max-token",
-            max_operator_user_ids="9001",
+            max_operator_phones="+79955406640",
         ),
         storage,
         notifier,
@@ -120,6 +135,14 @@ async def test_max_operator_service_replies_and_closes_report(tmp_path: Path) ->
     service._client = _MaxClientStub()  # type: ignore[assignment]
 
     try:
+        operator = await storage.upsert_platform_user(
+            platform="max",
+            platform_user_id=9001,
+            platform_chat_id=99001,
+            name="Operator",
+        )
+        await storage.update_user_phone(operator.id, "+79955406640")
+
         user = await storage.upsert_platform_user(
             platform="max",
             platform_user_id=7001,
@@ -153,5 +176,43 @@ async def test_max_operator_service_replies_and_closes_report(tmp_path: Path) ->
             ("max", 7001, 8800555, "Ответ по заявке №1:\nМастер уже едет"),
             ("max", 7001, 8800555, "Заявка №1 закрыта.\nПроблема решена"),
         ]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_max_operator_service_activates_operator_by_phone_message(tmp_path: Path) -> None:
+    db_path = tmp_path / "max_operator_activate.db"
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{db_path}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    storage = Storage(session_factory)
+    notifier = _NotifierStub()
+    service = MaxOperatorService(
+        Settings(
+            telegram_bot_token="123456:TEST",
+            max_bot_token="max-token",
+            max_operator_phones="+79955406640",
+        ),
+        storage,
+        notifier,
+    )
+    service._client = _MaxClientStub()  # type: ignore[assignment]
+
+    try:
+        activated = await service.handle_operator_message(99001, 9001, "+7 (995) 540-66-40")
+        user = await storage.get_user_by_platform_id(platform="max", platform_user_id=9001)
+
+        assert activated is True
+        assert user is not None
+        assert user.phone == "+79955406640"
+        assert await service.is_operator(9001) is True
+        assert service._client.chat_messages[0] == (99001, "Режим оператора активирован по номеру телефона. Теперь доступны /queue, /take, /reply и /close.")  # type: ignore[attr-defined]
     finally:
         await engine.dispose()

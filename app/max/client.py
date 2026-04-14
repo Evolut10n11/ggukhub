@@ -44,16 +44,40 @@ class MaxBotClient:
 
     async def send_message(
         self,
-        chat_id: int,
+        chat_id: int | None,
+        text: str,
+        *,
+        user_id: int | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+        format: str = "markdown",
+    ) -> dict[str, Any]:
+        if chat_id is None and user_id is None:
+            raise ValueError("Either chat_id or user_id must be provided")
+        body: dict[str, Any] = {"text": text, "format": format}
+        if attachments:
+            body["attachments"] = attachments
+        params: dict[str, Any] = {}
+        if chat_id is not None:
+            params["chat_id"] = chat_id
+        if user_id is not None:
+            params["user_id"] = user_id
+        return await self._post("messages", params=params, json=body)
+
+    async def send_direct_message(
+        self,
+        user_id: int,
         text: str,
         *,
         attachments: list[dict[str, Any]] | None = None,
         format: str = "markdown",
     ) -> dict[str, Any]:
-        body: dict[str, Any] = {"text": text, "format": format}
-        if attachments:
-            body["attachments"] = attachments
-        return await self._post("messages", params={"chat_id": chat_id}, json=body)
+        return await self.send_message(
+            None,
+            text,
+            user_id=user_id,
+            attachments=attachments,
+            format=format,
+        )
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {"callback_id": callback_id}
@@ -78,6 +102,9 @@ class MaxBotClient:
         # Files come with a 'url' field in the attachment payload.
         return None
 
+    async def set_commands(self, commands: list[dict[str, str]]) -> dict[str, Any]:
+        return await self._patch("me", json={"commands": commands})
+
     # ── HTTP helpers ──
 
     async def _get(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -93,6 +120,11 @@ class MaxBotClient:
     async def _put(self, path: str, *, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None) -> dict[str, Any]:
         client = await self._get_client()
         resp = await client.put(f"/{path}", params=params, json=json)
+        return self._handle_response(resp)
+
+    async def _patch(self, path: str, *, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None) -> dict[str, Any]:
+        client = await self._get_client()
+        resp = await client.patch(f"/{path}", params=params, json=json)
         return self._handle_response(resp)
 
     @staticmethod

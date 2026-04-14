@@ -15,6 +15,9 @@ from app.core.models import BitrixEvent, Incident, IncidentEvent, Report, Report
 from app.core.schemas import ReportAuditCreate, ReportCreate, ReportLookupResult, SessionPayload
 from app.core.utils import dump_json
 
+TELEGRAM_PLATFORM = "telegram"
+MAX_PLATFORM = "max"
+
 
 class Storage:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
@@ -25,15 +28,47 @@ class Storage:
             await session.execute(text("SELECT 1"))
 
     async def upsert_user(self, telegram_id: int, name: str | None) -> User:
+        return await self.upsert_platform_user(
+            platform=TELEGRAM_PLATFORM,
+            platform_user_id=telegram_id,
+            name=name,
+        )
+
+    async def upsert_platform_user(
+        self,
+        *,
+        platform: str,
+        platform_user_id: int,
+        name: str | None,
+        platform_chat_id: int | None = None,
+    ) -> User:
+        normalized_platform = _normalize_platform(platform)
+        legacy_user_id = _legacy_user_key(normalized_platform, platform_user_id)
         async with self._session_factory() as session:
-            stmt: Select[tuple[User]] = select(User).where(User.telegram_id == telegram_id)
-            result = await session.execute(stmt)
-            user = result.scalar_one_or_none()
+            user = await self._find_user_by_platform_identity(
+                session,
+                platform=normalized_platform,
+                platform_user_id=platform_user_id,
+                legacy_user_id=legacy_user_id,
+            )
             if user is None:
-                user = User(telegram_id=telegram_id, name=name)
+                user = User(
+                    telegram_id=legacy_user_id,
+                    name=name,
+                    messenger_platform=normalized_platform,
+                    messenger_user_id=platform_user_id,
+                    messenger_chat_id=platform_chat_id if normalized_platform == MAX_PLATFORM else None,
+                )
                 session.add(user)
-            elif name and user.name != name:
-                user.name = name
+            else:
+                if name and user.name != name:
+                    user.name = name
+                if normalized_platform == MAX_PLATFORM and user.telegram_id != legacy_user_id:
+                    user.telegram_id = legacy_user_id
+                user.messenger_platform = normalized_platform
+                user.messenger_user_id = platform_user_id
+                if normalized_platform == MAX_PLATFORM and platform_chat_id is not None:
+                    user.messenger_chat_id = platform_chat_id
             await session.commit()
             await session.refresh(user)
             return user
@@ -43,6 +78,17 @@ class Storage:
             stmt: Select[tuple[User]] = select(User).where(User.telegram_id == telegram_id)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
+
+    async def get_user_by_platform_id(self, *, platform: str, platform_user_id: int) -> User | None:
+        normalized_platform = _normalize_platform(platform)
+        legacy_user_id = _legacy_user_key(normalized_platform, platform_user_id)
+        async with self._session_factory() as session:
+            return await self._find_user_by_platform_identity(
+                session,
+                platform=normalized_platform,
+                platform_user_id=platform_user_id,
+                legacy_user_id=legacy_user_id,
+            )
 
     async def get_user_by_id(self, user_id: int) -> User | None:
         async with self._session_factory() as session:
@@ -57,6 +103,26 @@ class Storage:
             user = result.scalar_one_or_none()
             if user:
                 user.phone = phone
+                await session.commit()
+
+    async def update_user_address(
+        self,
+        user_id: int,
+        *,
+        jk: str | None,
+        house: str | None,
+        entrance: str | None,
+        apartment: str | None,
+    ) -> None:
+        async with self._session_factory() as session:
+            stmt: Select[tuple[User]] = select(User).where(User.id == user_id)
+            result = await session.execute(stmt)
+            user = result.scalar_one_or_none()
+            if user:
+                user.jk = jk
+                user.house = house
+                user.entrance = entrance
+                user.apartment = apartment
                 await session.commit()
 
     async def update_user_bitrix_contact_id(self, user_id: int, contact_id: str) -> None:
@@ -188,6 +254,27 @@ class Storage:
                 return None
             return row[0], row[1]
 
+    async def get_report_with_user(self, report_id: int) -> tuple[Report, User] | None:
+        async with self._session_factory() as session:
+            stmt = select(Report, User).join(User, Report.user_id == User.id).where(Report.id == report_id)
+            result = await session.execute(stmt)
+            row = result.first()
+            if row is None:
+                return None
+            return row[0], row[1]
+
+    async def update_report_status(self, report_id: int, status: str) -> Report | None:
+        async with self._session_factory() as session:
+            stmt: Select[tuple[Report]] = select(Report).where(Report.id == report_id)
+            result = await session.execute(stmt)
+            report = result.scalar_one_or_none()
+            if report is None:
+                return None
+            report.status = status
+            await session.commit()
+            await session.refresh(report)
+            return report
+
     async def update_report_status_by_bitrix_id(self, bitrix_id: str, status: str) -> Report | None:
         async with self._session_factory() as session:
             stmt: Select[tuple[Report]] = select(Report).where(Report.bitrix_id == str(bitrix_id))
@@ -224,6 +311,32 @@ class Storage:
                 if is_active_report_status(report.status):
                     return self._to_report_lookup_result(report)
             return None
+
+    async def list_recent_reports_with_users(
+        self,
+        *,
+        platform: str | None = None,
+        active_only: bool = False,
+        limit: int = 10,
+    ) -> list[tuple[Report, User]]:
+        async with self._session_factory() as session:
+            stmt = (
+                select(Report, User)
+                .join(User, Report.user_id == User.id)
+                .order_by(Report.created_at.desc(), Report.id.desc())
+                .limit(limit * 3)
+            )
+            if platform is not None:
+                stmt = stmt.where(User.messenger_platform == _normalize_platform(platform))
+            result = await session.execute(stmt)
+            rows: list[tuple[Report, User]] = []
+            for report, user in result.all():
+                if active_only and not is_active_report_status(report.status):
+                    continue
+                rows.append((report, user))
+                if len(rows) >= limit:
+                    break
+            return rows
 
     async def get_recent_report_timestamps(self, scope_key: str, since: datetime) -> list[datetime]:
         async with self._session_factory() as session:
@@ -316,3 +429,48 @@ class Storage:
             jk=report.jk,
             bitrix_id=report.bitrix_id,
         )
+
+    async def _find_user_by_platform_identity(
+        self,
+        session: AsyncSession,
+        *,
+        platform: str,
+        platform_user_id: int,
+        legacy_user_id: int,
+    ) -> User | None:
+        stmt = (
+            select(User)
+            .where(User.messenger_platform == platform)
+            .where(User.messenger_user_id == platform_user_id)
+        )
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user is not None:
+            return user
+
+        stmt = select(User).where(User.telegram_id == legacy_user_id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user is not None:
+            return user
+
+        if platform != MAX_PLATFORM:
+            return None
+
+        # Support legacy MAX rows created before messenger metadata existed.
+        stmt = select(User).where(User.telegram_id == platform_user_id)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+
+def _normalize_platform(platform: str | None) -> str:
+    value = str(platform or TELEGRAM_PLATFORM).strip().lower()
+    if value == MAX_PLATFORM:
+        return MAX_PLATFORM
+    return TELEGRAM_PLATFORM
+
+
+def _legacy_user_key(platform: str, platform_user_id: int) -> int:
+    if platform == MAX_PLATFORM:
+        return -abs(int(platform_user_id))
+    return int(platform_user_id)

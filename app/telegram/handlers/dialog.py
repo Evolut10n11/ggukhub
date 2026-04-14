@@ -27,12 +27,14 @@ router = Router(name="dialog")
 
 
 _cached_dialog_service: DialogService | None = None
+_cached_dialog_service_owner: AppServices | None = None
 
 
 def _dialog_service(services: AppServices) -> DialogService:
-    global _cached_dialog_service
-    if _cached_dialog_service is None:
+    global _cached_dialog_service, _cached_dialog_service_owner
+    if _cached_dialog_service is None or _cached_dialog_service_owner is not services:
         _cached_dialog_service = DialogService(services)
+        _cached_dialog_service_owner = services
     return _cached_dialog_service
 
 
@@ -61,6 +63,8 @@ def _message_transport(message: Message) -> DialogTransport:
         display_name=_name_from_message(message),
         send_text=_send_text,
         clear_inline_keyboard=_clear_inline_keyboard,
+        platform="telegram",
+        platform_chat_id=message.chat.id,
     )
 
 
@@ -71,8 +75,9 @@ def _callback_message(callback: CallbackQuery) -> Message | None:
 
 
 def _callback_transport(callback: CallbackQuery) -> DialogTransport:
+    message = _callback_message(callback)
+
     async def _send_text(text: str, reply_markup: Any | None) -> None:
-        message = _callback_message(callback)
         if message is not None:
             await message.answer(text, reply_markup=reply_markup or build_main_menu_keyboard())
             return
@@ -83,7 +88,6 @@ def _callback_transport(callback: CallbackQuery) -> DialogTransport:
         )
 
     async def _clear_inline_keyboard() -> None:
-        message = _callback_message(callback)
         if message is None:
             return
         try:
@@ -96,6 +100,8 @@ def _callback_transport(callback: CallbackQuery) -> DialogTransport:
         display_name=_name_from_callback(callback),
         send_text=_send_text,
         clear_inline_keyboard=_clear_inline_keyboard,
+        platform="telegram",
+        platform_chat_id=message.chat.id if message is not None else callback.from_user.id,
     )
 
 
@@ -334,6 +340,22 @@ async def phone_reuse_other_handler(callback: CallbackQuery, services: AppServic
     if callback.from_user is None:
         return
     await _dialog_service(services).request_new_phone(_callback_transport(callback))
+
+
+@router.callback_query(F.data == "address_reuse_yes")
+async def address_reuse_yes_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).confirm_saved_address(_callback_transport(callback))
+
+
+@router.callback_query(F.data == "address_reuse_no")
+async def address_reuse_no_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).reject_saved_address(_callback_transport(callback))
 
 
 @router.callback_query()

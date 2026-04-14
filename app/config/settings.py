@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     bitrix_rest_url: str | None = Field(default=None, alias="BITRIX_REST_URL")
     bitrix_token: str | None = Field(default=None, alias="BITRIX_TOKEN")
     bitrix_shared_secret: str | None = Field(default=None, alias="BITRIX_SHARED_SECRET")
+    bitrix_debug_webhook_url: str | None = Field(default=None, alias="BITRIX_DEBUG_WEBHOOK_URL")
+    bitrix_request_override_url: str | None = Field(default=None, alias="BITRIX_REQUEST_OVERRIDE_URL")
 
     bitrix_ticket_method: str = Field(default="crm.lead.add", alias="BITRIX_TICKET_METHOD")
     bitrix_comment_method: str = Field(default="crm.timeline.comment.add", alias="BITRIX_COMMENT_METHOD")
@@ -56,7 +58,11 @@ class Settings(BaseSettings):
     bitrix_deal_stage_id: str = Field(default="C1:NEW", alias="BITRIX_DEAL_STAGE_ID")
     bitrix_deal_assigned_by_id: str = Field(default="18388", alias="BITRIX_DEAL_ASSIGNED_BY_ID")
     bitrix_deal_category_id: str = Field(default="1", alias="BITRIX_DEAL_CATEGORY_ID")
-    bitrix_deal_source_id: str = Field(default="49", alias="BITRIX_DEAL_SOURCE_ID")
+    bitrix_lead_source_id: str = Field(
+        default="49",
+        alias="BITRIX_LEAD_SOURCE_ID",
+        validation_alias=AliasChoices("BITRIX_LEAD_SOURCE_ID", "BITRIX_SOURCE_ID", "BITRIX_DEAL_SOURCE_ID"),
+    )
 
     bitrix_timeout_seconds: float = Field(default=10.0, alias="BITRIX_TIMEOUT_SECONDS")
     bitrix_status_cache_ttl_seconds: int = Field(default=600, alias="BITRIX_STATUS_CACHE_TTL_SECONDS")
@@ -77,6 +83,7 @@ class Settings(BaseSettings):
     max_bot_token: str = Field(default="", alias="MAX_BOT_TOKEN")
     max_api_base_url: str = Field(default="https://platform-api.max.ru", alias="MAX_API_BASE_URL")
     max_polling_timeout: int = Field(default=30, alias="MAX_POLLING_TIMEOUT")
+    max_operator_user_ids: str = Field(default="", alias="MAX_OPERATOR_USER_IDS")
 
     incident_window_minutes: int = Field(default=15, alias="INCIDENT_WINDOW_MINUTES")
     incident_threshold: int = Field(default=5, alias="INCIDENT_THRESHOLD")
@@ -119,7 +126,11 @@ class Settings(BaseSettings):
 
     @property
     def bitrix_enabled(self) -> bool:
-        return bool(self.bitrix_webhook_url or (self.bitrix_rest_url and self.bitrix_token))
+        return bool(
+            self.bitrix_request_override_url
+            or self.bitrix_webhook_url
+            or (self.bitrix_rest_url and self.bitrix_token)
+        )
 
 
 @lru_cache

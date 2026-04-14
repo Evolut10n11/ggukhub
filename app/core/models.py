@@ -18,16 +18,39 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (Index("ix_users_messenger_identity", "messenger_platform", "messenger_user_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     telegram_id: Mapped[int] = mapped_column(BIGINT, unique=True, index=True)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    messenger_platform: Mapped[str | None] = mapped_column(String(32), nullable=True, default="telegram")
+    messenger_user_id: Mapped[int | None] = mapped_column(BIGINT, nullable=True)
+    messenger_chat_id: Mapped[int | None] = mapped_column(BIGINT, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    jk: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    house: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    entrance: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    apartment: Mapped[str | None] = mapped_column(String(64), nullable=True)
     bitrix_contact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     sessions: Mapped["SessionState"] = relationship(back_populates="user", uselist=False)
     reports: Mapped[list["Report"]] = relationship(back_populates="user")
+
+    @property
+    def platform(self) -> str:
+        if self.messenger_platform:
+            return str(self.messenger_platform)
+        if self.messenger_chat_id is not None or int(self.telegram_id) < 0:
+            return "max"
+        return "telegram"
+
+    @property
+    def platform_user_id(self) -> int:
+        raw_value = self.messenger_user_id
+        if raw_value is None:
+            return abs(int(self.telegram_id))
+        return int(raw_value)
 
 
 class SessionState(Base):

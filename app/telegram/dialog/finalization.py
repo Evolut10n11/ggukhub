@@ -11,6 +11,7 @@ from app.bitrix.service import BitrixTicketService
 from app.core.buildings import BuildingRegistry
 from app.core.enums import BitrixSyncStatus, ReportAuditStage
 from app.core.models import Report, User
+from app.core.notifier import UserNotifier
 from app.core.regulation import REGULATION_VERSION, build_bitrix_audit_payload, build_report_composition_payload
 from app.core.schemas import ReportAuditCreate, ReportCreate
 from app.core.storage import Storage
@@ -27,12 +28,11 @@ from app.telegram.dialog.formatters import (
     build_report_summary,
 )
 from app.telegram.dialog.models import DialogSessionData, FinalizedReportDraft
-from app.telegram.notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
-MAX_ACTIVE_REPORTS = 5
-_TEST_PHONES: set[str] = {"+79999999999"}
+MAX_ACTIVE_REPORTS = 10
+_TEST_PHONES: set[str] = {"+79999999999", "+76969696969"}
 
 
 class ReportLimitExceeded(RuntimeError):
@@ -71,7 +71,8 @@ class DialogReportFinalizer:
         incidents: IncidentService,
         responder: RuleResponder,
         bitrix_service: BitrixTicketService,
-        notifier: TelegramNotifier,
+        notifier: UserNotifier,
+        max_operator_service: Any | None,
         label_resolver: Callable[[str], str],
         building_registry: BuildingRegistry | None = None,
         confirmation_budget_ms: int | None = None,
@@ -81,6 +82,7 @@ class DialogReportFinalizer:
         self._responder = responder
         self._bitrix_service = bitrix_service
         self._notifier = notifier
+        self._max_operator_service = max_operator_service
         self._label_resolver = label_resolver
         self._building_registry = building_registry
         self._confirmation_budget_ms = confirmation_budget_ms
@@ -111,7 +113,7 @@ class DialogReportFinalizer:
         normalized_report = {
             "local_report_id": report.id,
             "user_id": user.id,
-            "telegram_id": user.telegram_id,
+            "platform_user_id": user.platform_user_id,
             "jk": draft.jk,
             "address": draft.address,
             "apartment": draft.apartment,
@@ -132,6 +134,8 @@ class DialogReportFinalizer:
             stage=ReportAuditStage.REPORT_CREATED.value,
             payload=composition_payload,
         )
+        if self._max_operator_service is not None and user.platform == "max":
+            await self._max_operator_service.notify_new_report(report, user)
 
         generated = await self._responder.build_report_created(local_id=report.id, bitrix_id=None)
         mc = self._building_registry.management_company_for(draft.house) if self._building_registry else None
@@ -144,6 +148,7 @@ class DialogReportFinalizer:
                 entrance=draft.entrance,
                 apartment=draft.apartment,
                 bitrix_enabled=self._bitrix_service.enabled,
+                bitrix_sync_outcome="queued" if self._bitrix_service.enabled else "disabled",
                 mc_name=mc.name if mc else None,
                 mc_dispatcher_phone=mc.dispatcher_phone if mc else None,
                 mc_emergency_phone=mc.emergency_phone if mc else None,
@@ -178,13 +183,53 @@ class DialogReportFinalizer:
             is_mass_incident=incident.is_mass,
         )
 
+    async def build_created_reply_text(
+        self,
+        *,
+        report: Report,
+        user: User,
+        data: DialogSessionData,
+        incident_message: str | None,
+        bitrix_id: str | None,
+        bitrix_sync_outcome: str,
+    ) -> str:
+        draft = self.build_report_draft(data, user)
+        generated = await self._responder.build_report_created(local_id=report.id, bitrix_id=bitrix_id)
+        mc = self._building_registry.management_company_for(draft.house) if self._building_registry else None
+        summary = build_report_summary(
+            ReportSummaryView(
+                report_id=report.id,
+                category_label=self._label_resolver(draft.category),
+                jk=draft.jk,
+                house=draft.house,
+                entrance=draft.entrance,
+                apartment=draft.apartment,
+                bitrix_enabled=self._bitrix_service.enabled,
+                bitrix_id=bitrix_id,
+                bitrix_sync_outcome=bitrix_sync_outcome,
+                mc_name=mc.name if mc else None,
+                mc_dispatcher_phone=mc.dispatcher_phone if mc else None,
+                mc_emergency_phone=mc.emergency_phone if mc else None,
+            )
+        )
+        return build_created_report_reply(
+            CreatedReportReplyParts(
+                standard_reply=generated.text,
+                summary=summary,
+                incident_message=incident_message,
+                incident_report_id=report.id if incident_message else None,
+                include_missing_jk_note=draft.jk is None,
+            )
+        )
+
     async def sync_bitrix_ticket(
         self,
         *,
         report: Report,
         user: User,
         is_mass_incident: bool,
-    ) -> None:
+        notify_user: bool = True,
+    ) -> str | None:
         timeout_seconds = float(getattr(self._bitrix_service, "timeout_seconds", 10.0))
         telemetry = start_flow_telemetry(
             "bitrix_sync",
@@ -192,7 +237,7 @@ class DialogReportFinalizer:
             budget_ms=int(timeout_seconds * 1000),
         )
         try:
-            contact_id = await self._resolve_contact(user)
+            contact_id = await self._resolve_contact(user=user, report=report)
             bitrix_id = await self._bitrix_service.create_ticket(
                 report=report, user=user, contact_id=contact_id
             )
@@ -215,14 +260,15 @@ class DialogReportFinalizer:
                 ),
             )
             logger.warning("Bitrix ticket creation failed for report %s: %s | %s", report.id, error, telemetry_payload)
-            await self._notifier.send_message(
-                telegram_id=user.telegram_id,
-                text=(
-                    f"Заявка №{report.id} уже сохранена. "
-                    "Передачу в Bitrix24 уточняю вручную и вернусь с обновлением."
-                ),
-            )
-            return
+            if notify_user:
+                await self._notifier.send_user_message(
+                    user,
+                    text=(
+                        f"Заявка №{report.id} уже сохранена. "
+                        "Уточняю передачу вручную и вернусь с обновлением."
+                    ),
+                )
+            return None
 
         telemetry_payload = telemetry.finish(
             local_report_id=report.id,
@@ -241,11 +287,13 @@ class DialogReportFinalizer:
         logger.info("Bitrix ticket synced for report %s | %s", report.id, telemetry_payload)
 
         if is_mass_incident:
-            followup = f"Дополнительно: заявка №{report.id} передана в Bitrix24, номер {bitrix_id}."
+            followup = f"Дополнительно: заявка №{report.id} передана диспетчеру, номер {bitrix_id}."
             await self._bitrix_service.notify_managers_urgent(report)
         else:
-            followup = f"Заявка №{report.id} передана в Bitrix24. Номер в Bitrix24: {bitrix_id}."
-        await self._notifier.send_message(telegram_id=user.telegram_id, text=followup)
+            followup = f"Заявка №{report.id} передана диспетчеру. Номер заявки: {bitrix_id}."
+        if notify_user:
+            await self._notifier.send_user_message(user, followup)
+        return bitrix_id
 
     @staticmethod
     def build_report_draft(data: DialogSessionData, user: User) -> FinalizedReportDraft:
@@ -306,15 +354,26 @@ class DialogReportFinalizer:
             "bitrix_sync_outcome": "queued" if self._bitrix_service.enabled else "disabled",
         }
 
-    async def _resolve_contact(self, user: User) -> str | None:
-        phone = user.phone or ""
+    async def _resolve_contact(self, *, user: User, report: Report) -> str | None:
+        if not bool(getattr(self._bitrix_service, "contact_linking_enabled", False)):
+            return None
+        phone = str(report.phone or user.phone or "").strip()
         if not phone:
             return None
+        if user.bitrix_contact_id and str(user.phone or "").strip() == phone:
+            return user.bitrix_contact_id
         contact_id = await self._bitrix_service.find_contact_by_phone(phone)
         if contact_id:
+            if str(user.phone or "").strip() == phone:
+                await self._storage.update_user_bitrix_contact_id(user.id, contact_id)
+                user.bitrix_contact_id = contact_id
             return contact_id
-        display_name = user.name or f"Telegram {user.telegram_id}"
-        return await self._bitrix_service.create_contact(name=display_name, phone=phone)
+        display_name = user.name or f"{user.platform.title()} {user.platform_user_id}"
+        created_contact_id = await self._bitrix_service.create_contact(name=display_name, phone=phone)
+        if created_contact_id and str(user.phone or "").strip() == phone:
+            await self._storage.update_user_bitrix_contact_id(user.id, created_contact_id)
+            user.bitrix_contact_id = created_contact_id
+        return created_contact_id
 
     async def _check_report_limits(self, draft: FinalizedReportDraft) -> None:
         if draft.phone in _TEST_PHONES:

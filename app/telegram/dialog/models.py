@@ -20,6 +20,7 @@ class DialogStep(str, Enum):
     AWAITING_CATEGORY_SELECT = "awaiting_category_select"
     AWAITING_REPORT_CONFIRM = "awaiting_report_confirm"
     AWAITING_REPORT_CORRECTION = "awaiting_report_correction"
+    AWAITING_ADDRESS_REUSE_CONFIRM = "awaiting_address_reuse_confirm"
 
 
 class ClassificationSource(str, Enum):
@@ -71,6 +72,8 @@ class DialogTransport:
     display_name: str | None
     send_text: SendTextCallable
     clear_inline_keyboard: ClearKeyboardCallable
+    platform: str = "telegram"
+    platform_chat_id: int | None = None
 
 
 @dataclass(slots=True)

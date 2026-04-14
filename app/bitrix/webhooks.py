@@ -48,10 +48,16 @@ def parse_bitrix_event(payload: dict[str, Any]) -> BitrixParsedEvent:
 
     bitrix_id = _pick_str(
         payload.get("bitrix_id"),
+        payload.get("ENTITY_ID"),
+        payload.get("OWNER_ID"),
         payload.get("ID"),
         payload.get("id"),
+        data_dict.get("ENTITY_ID"),
+        data_dict.get("OWNER_ID"),
         data_dict.get("ID"),
         data_dict.get("id"),
+        fields_dict.get("ENTITY_ID"),
+        fields_dict.get("OWNER_ID"),
         fields_dict.get("ID"),
     )
     status = _pick_str(
@@ -64,9 +70,14 @@ def parse_bitrix_event(payload: dict[str, Any]) -> BitrixParsedEvent:
     message = _pick_str(
         payload.get("message"),
         payload.get("text"),
+        payload.get("COMMENT"),
+        payload.get("comment"),
         data_dict.get("COMMENT"),
+        data_dict.get("TEXT"),
+        data_dict.get("COMMENT_TEXT"),
         fields_dict.get("COMMENT"),
+        fields_dict.get("TEXT"),
+        fields_dict.get("COMMENT_TEXT"),
     )
 
     return BitrixParsedEvent(event_type=event_type, bitrix_id=bitrix_id, status=status, message=message)
-

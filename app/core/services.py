@@ -7,13 +7,14 @@ from app.bitrix.service import BitrixTicketService, BitrixWebhookService
 from app.config import Settings
 from app.core.buildings import BuildingRegistry
 from app.core.classifier import CategoryClassifier
+from app.core.notifier import UserNotifier
 from app.core.storage import Storage
 from app.core.tariffs import TariffDirectory
 from app.incidents.service import IncidentService
+from app.max.operator import MaxOperatorService
 from app.responders.rule_responder import RuleResponder
 from app.speech.client import SpeechToTextClient
 from app.telegram.dialog.runtime import DialogRuntimeState
-from app.telegram.notifier import TelegramNotifier
 
 
 @dataclass(slots=True)
@@ -30,10 +31,11 @@ class DialogDeps:
     incidents: IncidentService
     responder: RuleResponder
     bitrix_service: BitrixTicketService
-    notifier: TelegramNotifier
+    notifier: UserNotifier
     speech: SpeechToTextClient
     building_registry: BuildingRegistry
     dialog_runtime: DialogRuntimeState
+    max_operator_service: MaxOperatorService | None = None
 
 
 @dataclass(slots=True)
@@ -47,9 +49,10 @@ class AppServices:
     bitrix_client: BitrixApiClient
     bitrix_service: BitrixTicketService
     bitrix_webhook: BitrixWebhookService
-    notifier: TelegramNotifier
+    notifier: UserNotifier
     building_registry: BuildingRegistry
     tariffs: TariffDirectory
+    max_operator_service: MaxOperatorService | None = None
     dialog_runtime: DialogRuntimeState = field(default_factory=DialogRuntimeState)
 
     def bitrix_deps(self) -> BitrixDeps:
@@ -70,4 +73,5 @@ class AppServices:
             speech=self.speech,
             building_registry=self.building_registry,
             dialog_runtime=self.dialog_runtime,
+            max_operator_service=self.max_operator_service,
         )

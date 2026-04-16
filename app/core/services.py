@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.bitrix.client import BitrixApiClient
+from app.bitrix.connector import BitrixConnectorService
 from app.bitrix.service import BitrixTicketService, BitrixWebhookService
 from app.config import Settings
 from app.core.buildings import BuildingRegistry
@@ -36,6 +37,7 @@ class DialogDeps:
     building_registry: BuildingRegistry
     dialog_runtime: DialogRuntimeState
     max_operator_service: MaxOperatorService | None = None
+    bitrix_connector: BitrixConnectorService | None = None
 
 
 @dataclass(slots=True)
@@ -53,6 +55,7 @@ class AppServices:
     building_registry: BuildingRegistry
     tariffs: TariffDirectory
     max_operator_service: MaxOperatorService | None = None
+    bitrix_connector: BitrixConnectorService | None = None
     dialog_runtime: DialogRuntimeState = field(default_factory=DialogRuntimeState)
 
     def bitrix_deps(self) -> BitrixDeps:
@@ -74,4 +77,5 @@ class AppServices:
             building_registry=self.building_registry,
             dialog_runtime=self.dialog_runtime,
             max_operator_service=self.max_operator_service,
+            bitrix_connector=self.bitrix_connector,
         )

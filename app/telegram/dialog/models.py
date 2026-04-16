@@ -21,6 +21,8 @@ class DialogStep(str, Enum):
     AWAITING_REPORT_CONFIRM = "awaiting_report_confirm"
     AWAITING_REPORT_CORRECTION = "awaiting_report_correction"
     AWAITING_ADDRESS_REUSE_CONFIRM = "awaiting_address_reuse_confirm"
+    AWAITING_OPERATOR_MESSAGE = "awaiting_operator_message"
+    OPERATOR_CHAT = "operator_chat"
 
 
 class ClassificationSource(str, Enum):
@@ -37,6 +39,9 @@ class DialogSessionData(BaseModel):
     problem_text: str | None = None
     auto_category: str | None = None
     category: str | None = None
+    operator_report_id: int | None = None
+    operator_bitrix_id: str | None = None
+    operator_chat_id: int | None = None
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "DialogSessionData":

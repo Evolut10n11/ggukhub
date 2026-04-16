@@ -141,6 +141,11 @@ class MaxKeyboardFactory:
             [_cb_button("🏠 Вернуться в меню", "back_to_menu")],
         ])]
 
+    def close_operator_chat_keyboard(self) -> list[dict[str, Any]]:
+        return [_inline_keyboard_attachment([
+            [_cb_button("❌ Завершить чат с оператором", "close_operator_chat")],
+        ])]
+
     def operator_report_keyboard(self, report_id: int) -> list[dict[str, Any]]:
         return [_inline_keyboard_attachment([
             [_cb_button("👀 Взять в работу", f"op_take:{report_id}")],

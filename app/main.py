@@ -129,6 +129,39 @@ def _register_routes(app: FastAPI) -> None:
         await request.app.state.webhook_dispatcher.feed_update(request.app.state.webhook_bot, update)
         return {"ok": True}
 
+    @app.post("/bitrix/connector")
+    async def bitrix_connector_webhook(request: Request) -> dict[str, Any]:
+        """Receive operator messages from Bitrix Open Lines connector."""
+        _check_body_size(request)
+        runtime = _runtime_from_request(request)
+        connector = runtime.services.bitrix_connector
+        if connector is None or not connector.enabled:
+            raise HTTPException(status_code=503, detail="Connector is disabled")
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        messages = connector.parse_operator_event(payload)
+        forwarded = 0
+        max_client = getattr(request.app.state, "max_client", None)
+        for msg in messages:
+            ext_id = msg.external_user_id
+            chat = await runtime.services.storage.get_active_operator_chat_by_external_id(ext_id)
+            if chat is None:
+                logger.warning("No active operator chat for external_id=%s", ext_id)
+                continue
+            operator_label = f"Оператор{(' ' + msg.operator_name) if msg.operator_name else ''}"
+            reply_text = f"💬 {operator_label}:\n{msg.text}"
+            if max_client is not None:
+                try:
+                    await max_client.send_message(chat.max_chat_id, reply_text)
+                    forwarded += 1
+                except Exception:
+                    logger.exception("Failed to forward operator message to MAX chat %s", chat.max_chat_id)
+            else:
+                logger.warning("MAX client not available, cannot forward operator message")
+        return {"ok": True, "forwarded": forwarded}
+
     @app.get("/reports/{report_id}/audit")
     async def report_audit(report_id: int, request: Request) -> dict[str, Any]:
         runtime = _runtime_from_request(request)

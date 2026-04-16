@@ -69,11 +69,13 @@ async def _run_polling(runtime, stop_event: asyncio.Event) -> None:
             await watcher
 
 
-async def _run_max_polling(runtime, stop_event: asyncio.Event) -> None:
+async def _run_max_polling(runtime, stop_event: asyncio.Event, *, app=None) -> None:
     from app.max.polling import MaxPolling
 
     settings = runtime.services.settings
     poller = MaxPolling(settings, runtime.services)
+    if app is not None:
+        app.state.max_client = poller._client
 
     async def _wait_for_stop() -> None:
         await stop_event.wait()
@@ -123,7 +125,7 @@ async def _main() -> None:
                 logger.info("TELEGRAM_BOT_TOKEN not set, Telegram bot disabled")
 
             if settings.max_enabled:
-                max_task = asyncio.create_task(_run_max_polling(runtime, stop_event))
+                max_task = asyncio.create_task(_run_max_polling(runtime, stop_event, app=app))
                 tasks.add(max_task)
             else:
                 logger.info("MAX_BOT_TOKEN not set, MAX bot disabled")

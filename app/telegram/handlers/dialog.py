@@ -358,6 +358,22 @@ async def address_reuse_no_handler(callback: CallbackQuery, services: AppService
     await _dialog_service(services).reject_saved_address(_callback_transport(callback))
 
 
+@router.callback_query(F.data == "contact_operator")
+async def contact_operator_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).request_operator_contact(_callback_transport(callback))
+
+
+@router.callback_query(F.data == "close_operator_chat")
+async def close_operator_chat_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    await _dialog_service(services).close_operator_chat(_callback_transport(callback))
+
+
 @router.callback_query()
 async def callback_fallback_handler(callback: CallbackQuery) -> None:
     await _ack_callback(callback, "Кнопка устарела. Напишите сообщение, и я продолжу.", show_alert=True)

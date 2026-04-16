@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     max_operator_phones: str = Field(default="", alias="MAX_OPERATOR_PHONES")
     max_operator_user_ids: str = Field(default="", alias="MAX_OPERATOR_USER_IDS")
 
+    # Bitrix24 Open Lines connector
+    bitrix_connector_id: str = Field(default="max_green_garden", alias="BITRIX_CONNECTOR_ID")
+    bitrix_connector_line_id: int = Field(default=1, alias="BITRIX_CONNECTOR_LINE_ID")
+    bitrix_connector_enabled: bool = Field(default=False, alias="BITRIX_CONNECTOR_ENABLED")
+
     incident_window_minutes: int = Field(default=15, alias="INCIDENT_WINDOW_MINUTES")
     incident_threshold: int = Field(default=5, alias="INCIDENT_THRESHOLD")
 

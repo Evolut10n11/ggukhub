@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 logger = logging.getLogger(__name__)
 
 from app.core.enums import IncidentStatus, ReportStatus, is_active_report_status
-from app.core.models import BitrixEvent, Incident, IncidentEvent, Report, ReportAuditLog, SessionState, User
+from app.core.models import BitrixEvent, Incident, IncidentEvent, OperatorChat, Report, ReportAuditLog, SessionState, User
 from app.core.schemas import ReportAuditCreate, ReportCreate, ReportLookupResult, SessionPayload
 from app.core.utils import dump_json, normalize_phone
 
@@ -427,6 +427,62 @@ class Storage:
             await session.commit()
             await session.refresh(event)
             return event
+
+    # ── Operator chat sessions ──
+
+    async def create_operator_chat(
+        self,
+        *,
+        user_id: int,
+        max_chat_id: int,
+        max_user_id: int,
+        report_id: int | None = None,
+        bitrix_id: str | None = None,
+    ) -> OperatorChat:
+        async with self._session_factory() as session:
+            chat = OperatorChat(
+                user_id=user_id,
+                max_chat_id=max_chat_id,
+                max_user_id=max_user_id,
+                report_id=report_id,
+                bitrix_id=bitrix_id,
+                status="active",
+            )
+            session.add(chat)
+            await session.commit()
+            await session.refresh(chat)
+            return chat
+
+    async def get_active_operator_chat_by_max_user(self, max_user_id: int) -> OperatorChat | None:
+        async with self._session_factory() as session:
+            stmt = (
+                select(OperatorChat)
+                .where(OperatorChat.max_user_id == max_user_id, OperatorChat.status == "active")
+                .order_by(OperatorChat.created_at.desc())
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def get_active_operator_chat_by_external_id(self, external_user_id: str) -> OperatorChat | None:
+        """Find active operator chat by external user ID (max_{user_id})."""
+        if not external_user_id.startswith("max_"):
+            return None
+        try:
+            max_user_id = int(external_user_id[4:])
+        except ValueError:
+            return None
+        return await self.get_active_operator_chat_by_max_user(max_user_id)
+
+    async def close_operator_chat(self, chat_id: int) -> None:
+        async with self._session_factory() as session:
+            stmt = select(OperatorChat).where(OperatorChat.id == chat_id)
+            result = await session.execute(stmt)
+            chat = result.scalar_one_or_none()
+            if chat:
+                chat.status = "closed"
+                chat.closed_at = datetime.now(timezone.utc)
+                await session.commit()
 
     @staticmethod
     def _to_report_lookup_result(report: Report | None) -> ReportLookupResult | None:

@@ -37,6 +37,8 @@ from app.telegram.dialog.status_service import DialogReportLookupService
 from app.telegram.extractors import ExtractedReportContext
 from app.telegram.phrases import is_farewell_or_thanks, is_greeting
 
+from app.bitrix.connector import BitrixConnectorService
+
 if TYPE_CHECKING:
     from app.core.services import AppServices
 
@@ -82,6 +84,7 @@ class DialogService:
             building_registry=self._registry,
             confirmation_budget_ms=services.settings.report_confirmation_budget_ms,
         )
+        self._bitrix_connector: BitrixConnectorService | None = self._deps.bitrix_connector
         self._correction_flow = DialogCorrectionFlow(
             categories=self._deps.classifier.categories(),
             label_resolver=self._deps.classifier.label,
@@ -93,6 +96,9 @@ class DialogService:
         user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
+            if snapshot.step == DialogStep.OPERATOR_CHAT:
+                if self._bitrix_connector and self._bitrix_connector.enabled:
+                    await self._bitrix_connector.close_chat(user.platform_user_id)
             if snapshot.step not in (DialogStep.IDLE, DialogStep.AWAITING_JK):
                 await self._save_snapshot(user.id, DialogStep.AWAITING_JK, DialogSessionData())
                 await transport.send_text(
@@ -396,6 +402,54 @@ class DialogService:
             await transport.clear_inline_keyboard()
             await transport.send_text(self._build_report_correction_prompt(), None)
 
+    async def request_operator_contact(
+        self,
+        transport: DialogTransport,
+        *,
+        report_id: int | None = None,
+        bitrix_id: str | None = None,
+    ) -> None:
+        """Start an operator chat session from a client request."""
+        user = await self._upsert_user(transport)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            data = snapshot.data.model_copy()
+            data.operator_report_id = report_id
+            data.operator_bitrix_id = bitrix_id
+            data.operator_chat_id = transport.platform_chat_id
+
+            if self._bitrix_connector and self._bitrix_connector.enabled:
+                await self._save_snapshot(user.id, DialogStep.AWAITING_OPERATOR_MESSAGE, data)
+                await transport.send_text(
+                    "Напишите сообщение для оператора. Оно будет передано в CRM.",
+                    self._kb.close_operator_chat_keyboard(),
+                )
+            else:
+                # Fallback: comment-based one-way contact
+                await self._save_snapshot(user.id, DialogStep.AWAITING_OPERATOR_MESSAGE, data)
+                await transport.send_text(
+                    "Напишите сообщение для оператора. Мы передадим его в службу поддержки.",
+                    self._kb.close_operator_chat_keyboard(),
+                )
+
+    async def close_operator_chat(self, transport: DialogTransport) -> None:
+        """Close an active operator chat session."""
+        user = await self._upsert_user(transport)
+        async with self._runtime.user_lock(user.id):
+            snapshot = await self._load_snapshot(user.id)
+            if snapshot.step not in (DialogStep.AWAITING_OPERATOR_MESSAGE, DialogStep.OPERATOR_CHAT):
+                await transport.send_text("Нет активного чата с оператором.", None)
+                return
+
+            if self._bitrix_connector and self._bitrix_connector.enabled:
+                await self._bitrix_connector.close_chat(user.platform_user_id)
+
+            await self._save_snapshot(user.id, DialogStep.IDLE, DialogSessionData())
+            await transport.send_text(
+                "Чат с оператором завершён. Если нужна помощь, напишите новую заявку.",
+                self._kb.new_report_keyboard(),
+            )
+
     async def process_text(self, transport: DialogTransport, text: str, *, from_voice: bool = False) -> None:
         user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
@@ -471,6 +525,8 @@ class DialogService:
                 DialogStep.AWAITING_REPORT_CONFIRM: self._handle_awaiting_report_confirm,
                 DialogStep.AWAITING_REPORT_CORRECTION: self._handle_awaiting_report_correction,
                 DialogStep.AWAITING_ADDRESS_REUSE_CONFIRM: self._handle_awaiting_address_reuse_confirm,
+                DialogStep.AWAITING_OPERATOR_MESSAGE: self._handle_awaiting_operator_message,
+                DialogStep.OPERATOR_CHAT: self._handle_operator_chat,
             }
             handler = step_handlers.get(snapshot.step)
             if handler is None:
@@ -912,6 +968,81 @@ class DialogService:
                 return
 
         await self._send_report_confirmation(transport, user.id, updated)
+
+    async def _handle_awaiting_operator_message(
+        self,
+        *,
+        transport: DialogTransport,
+        user: User,
+        text: str,
+        data: DialogSessionData,
+        extracted: ExtractedReportContext,
+        from_voice: bool,
+    ) -> None:
+        _ = extracted, from_voice
+        if self._bitrix_connector and self._bitrix_connector.enabled:
+            sent = await self._bitrix_connector.send_client_message(
+                max_user_id=user.platform_user_id,
+                max_chat_id=transport.platform_chat_id or 0,
+                user_name=transport.display_name,
+                phone=user.phone,
+                message=text,
+                report_id=data.operator_report_id,
+                bitrix_id=data.operator_bitrix_id,
+            )
+            if sent:
+                await self._save_snapshot(user.id, DialogStep.OPERATOR_CHAT, data)
+                await transport.send_text(
+                    "Сообщение передано оператору. Ожидайте ответа или завершите чат.",
+                    self._kb.close_operator_chat_keyboard(),
+                )
+            else:
+                await transport.send_text(
+                    "Не удалось отправить сообщение. Попробуйте позже.",
+                    self._kb.close_operator_chat_keyboard(),
+                )
+        else:
+            # Fallback: post as Bitrix comment
+            if data.operator_bitrix_id and self._deps.bitrix_service.enabled:
+                await self._deps.bitrix_service.add_comment(
+                    bitrix_id=data.operator_bitrix_id,
+                    text=f"Сообщение от клиента: {text}",
+                )
+            await self._save_snapshot(user.id, DialogStep.IDLE, DialogSessionData())
+            await transport.send_text(
+                "Сообщение передано. Оператор свяжется с вами.",
+                self._kb.new_report_keyboard(),
+            )
+
+    async def _handle_operator_chat(
+        self,
+        *,
+        transport: DialogTransport,
+        user: User,
+        text: str,
+        data: DialogSessionData,
+        extracted: ExtractedReportContext,
+        from_voice: bool,
+    ) -> None:
+        _ = extracted, from_voice
+        if self._bitrix_connector and self._bitrix_connector.enabled:
+            await self._bitrix_connector.send_client_message(
+                max_user_id=user.platform_user_id,
+                max_chat_id=transport.platform_chat_id or 0,
+                user_name=transport.display_name,
+                phone=user.phone,
+                message=text,
+            )
+            await transport.send_text(
+                "Сообщение передано оператору.",
+                self._kb.close_operator_chat_keyboard(),
+            )
+        else:
+            await self._save_snapshot(user.id, DialogStep.IDLE, DialogSessionData())
+            await transport.send_text(
+                "Чат с оператором недоступен. Начните новую заявку.",
+                self._kb.new_report_keyboard(),
+            )
 
     # ── Helpers ──
 

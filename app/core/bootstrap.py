@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bitrix.client import BitrixApiClient
+from app.bitrix.connector import BitrixConnectorService
 from app.bitrix.service import BitrixTicketService, BitrixWebhookService
 from app.config import Settings, get_settings
 from app.core.classifier import CategoryClassifier
@@ -39,6 +40,7 @@ def build_services(
     bitrix_client = BitrixApiClient(cfg)
     bitrix_service = BitrixTicketService(settings=cfg, client=bitrix_client)
     bitrix_webhook = BitrixWebhookService(settings=cfg, storage=storage, notifier=notifier)
+    bitrix_connector = BitrixConnectorService(settings=cfg, client=bitrix_client, storage=storage)
 
     return AppServices(
         settings=cfg,
@@ -54,6 +56,7 @@ def build_services(
         building_registry=building_registry,
         tariffs=tariffs,
         max_operator_service=max_operator_service,
+        bitrix_connector=bitrix_connector,
     )
 
 

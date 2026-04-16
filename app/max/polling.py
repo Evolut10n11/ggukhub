@@ -327,6 +327,15 @@ class MaxPolling:
             await service.start(transport, include_welcome=True)
         elif payload == "back_to_menu_status":
             await service.process_text(transport, "Статус заявки")
+        elif payload == "contact_operator":
+            await service.request_operator_contact(transport)
+        elif payload.startswith("contact_operator:"):
+            parts = payload.split(":", 2)
+            report_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+            bitrix_id = parts[2] if len(parts) > 2 else None
+            await service.request_operator_contact(transport, report_id=report_id, bitrix_id=bitrix_id)
+        elif payload == "close_operator_chat":
+            await service.close_operator_chat(transport)
 
     def _make_transport(self, chat_id: int, user_id: int, display_name: str | None) -> DialogTransport:
         client = self._client

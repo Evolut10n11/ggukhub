@@ -178,6 +178,12 @@ class TelegramKeyboardFactory:
         builder.adjust(1)
         return builder.as_markup()
 
+    def close_operator_chat_keyboard(self) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+        builder.button(text="❌ Завершить чат с оператором", callback_data="close_operator_chat")
+        builder.adjust(1)
+        return builder.as_markup()
+
 
 def build_main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(

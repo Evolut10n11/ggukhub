@@ -128,6 +128,20 @@ class BitrixEvent(Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class OperatorChat(Base):
+    __tablename__ = "operator_chats"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    max_chat_id: Mapped[int] = mapped_column(BIGINT, index=True)
+    max_user_id: Mapped[int] = mapped_column(BIGINT, index=True)
+    report_id: Mapped[int | None] = mapped_column(ForeignKey("reports.id"), nullable=True)
+    bitrix_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ReportAuditLog(Base):
     __tablename__ = "report_audit_logs"
 

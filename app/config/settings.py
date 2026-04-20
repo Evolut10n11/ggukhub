@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     max_api_base_url: str = Field(default="https://platform-api.max.ru", alias="MAX_API_BASE_URL")
     max_polling_timeout: int = Field(default=30, alias="MAX_POLLING_TIMEOUT")
     max_operator_user_ids: str = Field(default="", alias="MAX_OPERATOR_USER_IDS")
-    max_redirect_bot_url: str = Field(default="https://web.max.ru/333870115", alias="MAX_REDIRECT_BOT_URL")
+    max_redirect_bot_url: str = Field(default="@id6234203430_3_bot", alias="MAX_REDIRECT_BOT_URL")
 
     incident_window_minutes: int = Field(default=15, alias="INCIDENT_WINDOW_MINUTES")
     incident_threshold: int = Field(default=5, alias="INCIDENT_THRESHOLD")

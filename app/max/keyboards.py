@@ -27,6 +27,15 @@ def _link_button(text: str, url: str) -> dict[str, Any]:
     return {"type": "link", "text": text, "url": url}
 
 
+def _normalize_redirect_target(value: str | None) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("@"):
+        return f"https://max.ru/{raw[1:]}"
+    return raw
+
+
 def _display_name(name: str) -> str:
     value = " ".join(str(name).split()).strip()
     if value.lower().startswith("жк "):
@@ -40,7 +49,7 @@ class MaxKeyboardFactory:
     """Build MAX inline keyboards matching the dialog keyboard protocol."""
 
     def __init__(self, *, redirect_bot_url: str | None = None) -> None:
-        self._redirect_bot_url = str(redirect_bot_url or "").strip()
+        self._redirect_bot_url = _normalize_redirect_target(redirect_bot_url)
 
     def jk_keyboard(self, complex_names: list[str], page: int) -> list[dict[str, Any]]:
         total = len(complex_names)

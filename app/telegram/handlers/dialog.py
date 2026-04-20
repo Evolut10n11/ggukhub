@@ -63,6 +63,8 @@ def _message_transport(message: Message) -> DialogTransport:
         display_name=_name_from_message(message),
         send_text=_send_text,
         clear_inline_keyboard=_clear_inline_keyboard,
+        platform="telegram",
+        platform_chat_id=message.chat.id,
     )
 
 
@@ -73,8 +75,9 @@ def _callback_message(callback: CallbackQuery) -> Message | None:
 
 
 def _callback_transport(callback: CallbackQuery) -> DialogTransport:
+    message = _callback_message(callback)
+
     async def _send_text(text: str, reply_markup: Any | None) -> None:
-        message = _callback_message(callback)
         if message is not None:
             await message.answer(text, reply_markup=reply_markup or build_main_menu_keyboard())
             return
@@ -85,7 +88,6 @@ def _callback_transport(callback: CallbackQuery) -> DialogTransport:
         )
 
     async def _clear_inline_keyboard() -> None:
-        message = _callback_message(callback)
         if message is None:
             return
         try:
@@ -98,6 +100,8 @@ def _callback_transport(callback: CallbackQuery) -> DialogTransport:
         display_name=_name_from_callback(callback),
         send_text=_send_text,
         clear_inline_keyboard=_clear_inline_keyboard,
+        platform="telegram",
+        platform_chat_id=message.chat.id if message is not None else callback.from_user.id,
     )
 
 

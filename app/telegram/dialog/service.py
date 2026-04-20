@@ -77,6 +77,7 @@ class DialogService:
             responder=self._deps.responder,
             bitrix_service=self._deps.bitrix_service,
             notifier=self._deps.notifier,
+            max_operator_service=self._deps.max_operator_service,
             label_resolver=self._deps.classifier.label,
             building_registry=self._registry,
             confirmation_budget_ms=services.settings.report_confirmation_budget_ms,
@@ -89,7 +90,7 @@ class DialogService:
     # ── Public entry points ──
 
     async def start(self, transport: DialogTransport, *, include_welcome: bool) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step not in (DialogStep.IDLE, DialogStep.AWAITING_JK):
@@ -126,7 +127,7 @@ class DialogService:
             await self._send_onboarding(transport, include_welcome=include_welcome)
 
     async def select_housing_complex(self, transport: DialogTransport, complex_name: str) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_JK:
@@ -163,7 +164,7 @@ class DialogService:
                 await transport.send_text("Спасибо. Уточните, пожалуйста, дом.", None)
 
     async def show_standalone_houses(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_JK:
@@ -183,8 +184,11 @@ class DialogService:
                 self._kb.house_keyboard(houses, page=0),
             )
 
-    async def get_house_list_for_user(self, platform_user_id: int) -> list[Any] | None:
-        user = await self._deps.storage.get_user_by_telegram_id(platform_user_id)
+    async def get_house_list_for_user(self, platform: str, platform_user_id: int) -> list[Any] | None:
+        user = await self._deps.storage.get_user_by_platform_id(
+            platform=platform,
+            platform_user_id=platform_user_id,
+        )
         if not user:
             return None
         snapshot = await self._load_snapshot(user.id)
@@ -193,7 +197,7 @@ class DialogService:
         return self._get_current_house_list(snapshot.data)
 
     async def paginate_houses(self, transport: DialogTransport, page: int) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_HOUSE:
@@ -203,7 +207,7 @@ class DialogService:
             await transport.send_text("Выберите дом:", self._kb.house_keyboard(houses, page=page))
 
     async def select_house(self, transport: DialogTransport, index: int) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_HOUSE:
@@ -233,7 +237,7 @@ class DialogService:
                 )
 
     async def select_entrance(self, transport: DialogTransport, entrance: str) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_ENTRANCE:
@@ -254,7 +258,7 @@ class DialogService:
             await transport.send_text("Укажите номер квартиры.", None)
 
     async def mark_unknown_housing_complex(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_JK:
@@ -269,7 +273,7 @@ class DialogService:
             )
 
     async def confirm_category(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_CATEGORY_CONFIRM:
@@ -282,7 +286,7 @@ class DialogService:
             await self._send_report_confirmation(transport, user.id, data)
 
     async def request_manual_category(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_CATEGORY_CONFIRM:
@@ -294,7 +298,7 @@ class DialogService:
             await transport.send_text("Выберите подходящую категорию:", self._kb.category_select_keyboard())
 
     async def select_category(self, transport: DialogTransport, category: str) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_CATEGORY_SELECT:
@@ -314,7 +318,7 @@ class DialogService:
             await self._send_report_confirmation(transport, user.id, data)
 
     async def confirm_saved_phone(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_PHONE_REUSE_CONFIRM:
@@ -335,7 +339,7 @@ class DialogService:
             await self._continue_after_problem_capture(transport, user, data, from_voice=False)
 
     async def request_new_phone(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_PHONE_REUSE_CONFIRM:
@@ -347,7 +351,7 @@ class DialogService:
             await transport.send_text(_PHONE_PROMPT_TEXT, None)
 
     async def confirm_saved_address(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_ADDRESS_REUSE_CONFIRM:
@@ -358,7 +362,7 @@ class DialogService:
             await transport.send_text(_PROBLEM_PROMPT_TEXT, None)
 
     async def reject_saved_address(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_ADDRESS_REUSE_CONFIRM:
@@ -369,7 +373,7 @@ class DialogService:
             await self._send_onboarding(transport, include_welcome=False)
 
     async def confirm_report(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_REPORT_CONFIRM:
@@ -381,7 +385,7 @@ class DialogService:
             await self._finalize_report(transport, user, snapshot.data)
 
     async def request_report_correction(self, transport: DialogTransport) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             if snapshot.step != DialogStep.AWAITING_REPORT_CONFIRM:
@@ -393,7 +397,7 @@ class DialogService:
             await transport.send_text(self._build_report_correction_prompt(), None)
 
     async def process_text(self, transport: DialogTransport, text: str, *, from_voice: bool = False) -> None:
-        user = await self._upsert_user(transport.platform_user_id, transport.display_name)
+        user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):
             snapshot = await self._load_snapshot(user.id)
             preprocessed = await self._preprocessor.preprocess(user=user, snapshot=snapshot, text=text)
@@ -1137,8 +1141,13 @@ class DialogService:
         await transport.send_text(problem_text_rejection_message(validation), None)
         return False
 
-    async def _upsert_user(self, telegram_id: int, display_name: str | None) -> User:
-        return await self._deps.storage.upsert_user(telegram_id=telegram_id, name=display_name)
+    async def _upsert_user(self, transport: DialogTransport) -> User:
+        return await self._deps.storage.upsert_platform_user(
+            platform=transport.platform,
+            platform_user_id=transport.platform_user_id,
+            name=transport.display_name,
+            platform_chat_id=transport.platform_chat_id,
+        )
 
     async def _load_snapshot(self, user_id: int) -> DialogSnapshot:
         payload = await self._deps.storage.get_session(user_id)

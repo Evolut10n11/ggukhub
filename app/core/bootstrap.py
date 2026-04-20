@@ -7,15 +7,16 @@ from app.bitrix.service import BitrixTicketService, BitrixWebhookService
 from app.config import Settings, get_settings
 from app.core.classifier import CategoryClassifier
 from app.core.db import DatabaseRuntime, create_database_runtime
+from app.core.notifier import UserNotifier
 from app.core.services import AppServices
 from app.core.storage import Storage
 from app.core.tariffs import TariffDirectory
 from app.core.buildings import BuildingRegistry
 from app.incidents.detector import SpikeDetector
 from app.incidents.service import IncidentService
+from app.max.operator import MaxOperatorService
 from app.responders.rule_responder import RuleResponder
 from app.speech.client import SpeechToTextClient
-from app.telegram.notifier import TelegramNotifier
 
 
 def build_services(
@@ -33,7 +34,8 @@ def build_services(
     incidents = IncidentService(storage=storage, detector=detector)
     responder = RuleResponder()
     speech = SpeechToTextClient(cfg)
-    notifier = TelegramNotifier(cfg.telegram_bot_token)
+    notifier = UserNotifier(cfg)
+    max_operator_service = MaxOperatorService(cfg, storage, notifier)
     bitrix_client = BitrixApiClient(cfg)
     bitrix_service = BitrixTicketService(settings=cfg, client=bitrix_client)
     bitrix_webhook = BitrixWebhookService(settings=cfg, storage=storage, notifier=notifier)
@@ -51,6 +53,7 @@ def build_services(
         notifier=notifier,
         building_registry=building_registry,
         tariffs=tariffs,
+        max_operator_service=max_operator_service,
     )
 
 

@@ -13,7 +13,6 @@ STANDALONE_JK_LABEL = "📍 Другой дом"
 
 
 def _inline_keyboard_attachment(buttons: list[list[dict[str, Any]]]) -> dict[str, Any]:
-    """Wrap button rows into MAX inline_keyboard attachment."""
     return {
         "type": "inline_keyboard",
         "payload": {"buttons": buttons},
@@ -22,6 +21,10 @@ def _inline_keyboard_attachment(buttons: list[list[dict[str, Any]]]) -> dict[str
 
 def _cb_button(text: str, payload: str) -> dict[str, Any]:
     return {"type": "callback", "text": text, "payload": payload}
+
+
+def _link_button(text: str, url: str) -> dict[str, Any]:
+    return {"type": "link", "text": text, "url": url}
 
 
 def _display_name(name: str) -> str:
@@ -34,7 +37,10 @@ def _display_name(name: str) -> str:
 
 
 class MaxKeyboardFactory:
-    """Builds MAX inline_keyboard attachments matching KeyboardFactory protocol."""
+    """Build MAX inline keyboards matching the dialog keyboard protocol."""
+
+    def __init__(self, *, redirect_bot_url: str | None = None) -> None:
+        self._redirect_bot_url = str(redirect_bot_url or "").strip()
 
     def jk_keyboard(self, complex_names: list[str], page: int) -> list[dict[str, Any]]:
         total = len(complex_names)
@@ -132,11 +138,26 @@ class MaxKeyboardFactory:
         ])]
 
     def new_report_keyboard(self) -> list[dict[str, Any]]:
-        return [_inline_keyboard_attachment([
-            [_cb_button("📝 Создать ещё заявку", "new_report")],
-        ])]
+        rows: list[list[dict[str, Any]]] = []
+        if self._redirect_bot_url:
+            rows.append([_link_button("📝 Обращение в УК", self._redirect_bot_url)])
+        else:
+            rows.append([_cb_button("📝 Создать ещё заявку", "new_report")])
+        return [_inline_keyboard_attachment(rows)]
 
     def back_to_menu_keyboard(self) -> list[dict[str, Any]]:
+        return self.resident_menu_keyboard()
+
+    def resident_menu_keyboard(self) -> list[dict[str, Any]]:
+        rows: list[list[dict[str, Any]]] = []
+        if self._redirect_bot_url:
+            rows.append([_link_button("📝 Обращение в УК", self._redirect_bot_url)])
+        rows.append([_cb_button("📋 Статус заявки", "back_to_menu_status")])
+        return [_inline_keyboard_attachment(rows)]
+
+    def operator_report_keyboard(self, report_id: int) -> list[dict[str, Any]]:
         return [_inline_keyboard_attachment([
-            [_cb_button("🏠 Вернуться в меню", "back_to_menu")],
+            [_cb_button("👀 Взять в работу", f"op_take:{report_id}")],
+            [_cb_button("💬 Ответить", f"op_reply:{report_id}")],
+            [_cb_button("✅ Закрыть", f"op_close:{report_id}")],
         ])]

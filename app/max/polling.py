@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import logging
@@ -21,7 +21,7 @@ class MaxPolling:
         self._settings = settings
         self._services = services
         self._client = MaxBotClient(settings)
-        self._kb = MaxKeyboardFactory()
+        self._kb = MaxKeyboardFactory(redirect_bot_url=settings.max_redirect_bot_url)
         self._marker: int | None = None
         self._running = False
         self._dialog_service: DialogService | None = None
@@ -31,16 +31,22 @@ class MaxPolling:
             self._dialog_service = DialogService(self._services, keyboard_factory=self._kb)
         return self._dialog_service
 
+    def _get_operator_service(self):
+        return getattr(self._services, "max_operator_service", None)
+
     async def start(self) -> None:
         me = await self._client.get_me()
         bot_name = me.get("name", me.get("username", "MAX Bot"))
         logger.info("MAX bot started: %s", bot_name)
         try:
-            await self._client.set_commands([
-                {"name": "start", "description": "Начать работу с ботом"},
-                {"name": "new", "description": "Создать новую заявку"},
-                {"name": "status", "description": "Статус последней заявки"},
-            ])
+            await self._client.set_commands(
+                [
+                    {"name": "start", "description": "Начать работу с ботом"},
+                    {"name": "new", "description": "Создать новую заявку"},
+                    {"name": "status", "description": "Статус последней заявки"},
+                    {"name": "id", "description": "Показать мой user_id"},
+                ]
+            )
         except Exception:
             logger.warning("Failed to register MAX bot commands", exc_info=True)
         self._running = True
@@ -87,7 +93,7 @@ class MaxPolling:
             logger.debug("Ignoring MAX update type: %s", update_type)
 
     async def _handle_bot_started(self, update: dict[str, Any]) -> None:
-        """Handle 'bot_started' event — user pressed Start or opened chat for first time."""
+        """Handle 'bot_started' event when user opens chat or presses Start."""
         chat_id = update.get("chat_id")
         user = update.get("user", {})
         user_id = user.get("user_id")
@@ -95,9 +101,15 @@ class MaxPolling:
             return
         display_name = user.get("name")
         logger.info("MAX bot_started from user=%s chat=%s", user_id, chat_id)
-        transport = self._make_transport(chat_id, user_id, display_name)
-        service = self._get_dialog_service()
-        await service.start(transport, include_welcome=True)
+        operator_service = self._get_operator_service()
+        if operator_service is not None and operator_service.is_operator(user_id):
+            await self._client.send_message(
+                chat_id,
+                "Режим оператора активен. Напишите /queue, чтобы увидеть открытые заявки. Чтобы узнать свой MAX user_id, отправьте /id.",
+            )
+            await self._send_identity(chat_id, user_id)
+            return
+        await self._send_resident_menu(chat_id)
 
     async def _handle_message(self, update: dict[str, Any]) -> None:
         message = update.get("message", {})
@@ -114,7 +126,6 @@ class MaxPolling:
 
         display_name = sender.get("name")
 
-        # Check for voice/audio attachments
         attachments = body.get("attachments", [])
         audio_url = None
         for att in attachments:
@@ -133,11 +144,19 @@ class MaxPolling:
 
         logger.info("MAX message from user=%s chat=%s text=%r", user_id, chat_id, text[:100])
 
+        if text.lower() in {"/id", "/myid", "/userid"}:
+            await self._send_identity(chat_id, user_id)
+            return
+
+        operator_service = self._get_operator_service()
+        if operator_service is not None:
+            handled = await operator_service.handle_operator_message(chat_id, user_id, text)
+            if handled:
+                return
+
         # Handle commands
         if text.lower() in ("/start", "/new"):
-            transport = self._make_transport(chat_id, user_id, display_name)
-            service = self._get_dialog_service()
-            await service.start(transport, include_welcome=(text.lower() == "/start"))
+            await self._send_resident_menu(chat_id)
             return
 
         if text.lower() == "/status":
@@ -146,15 +165,26 @@ class MaxPolling:
             await service.process_text(transport, "Статус заявки")
             return
 
+        if text.startswith("/"):
+            await self._client.send_message(
+                chat_id,
+                "Неизвестная команда. Для жителей доступны /start, /new, /status, /id. Для оператора: /queue, /take, /reply, /close.",
+            )
+            return
+
         # Regular text
         transport = self._make_transport(chat_id, user_id, display_name)
         service = self._get_dialog_service()
         await service.process_text(transport, text)
 
+    async def _send_identity(self, chat_id: int, user_id: int) -> None:
+        await self._client.send_message(chat_id, f"Ваш MAX user_id: `{user_id}`")
+
     async def _handle_voice(self, chat_id: int, user_id: int, display_name: str | None, audio_url: str) -> None:
         await self._client.send_message(chat_id, "Приняла голосовое. Распознаю и сразу продолжу оформление заявки.")
         try:
             import httpx as _httpx
+
             async with _httpx.AsyncClient(timeout=30.0) as http:
                 resp = await http.get(audio_url)
                 resp.raise_for_status()
@@ -197,7 +227,7 @@ class MaxPolling:
 
     async def _edit_house_page(self, message_id: str, user_id: int, page: int) -> None:
         service = self._get_dialog_service()
-        houses = await service.get_house_list_for_user(user_id)
+        houses = await service.get_house_list_for_user("max", user_id)
         if houses is None:
             return
         attachments = self._kb.house_keyboard(houses, page=page)
@@ -219,14 +249,18 @@ class MaxPolling:
         transport = self._make_transport(chat_id, user_id, display_name)
         service = self._get_dialog_service()
 
-        # Acknowledge callback
         if callback_id:
             try:
                 await self._client.answer_callback(callback_id)
             except Exception:
                 pass
 
-        # Route callback by payload prefix (same as Telegram callback_data)
+        operator_service = self._get_operator_service()
+        if operator_service is not None:
+            handled = await operator_service.handle_operator_callback(chat_id, user_id, payload)
+            if handled:
+                return
+
         if payload.startswith("jk_pick:"):
             idx = int(payload.split(":", 1)[1])
             complex_names = self._services.building_registry.complex_names
@@ -278,11 +312,21 @@ class MaxPolling:
         elif payload == "address_reuse_no":
             await service.reject_saved_address(transport)
         elif payload == "new_report":
-            await service.start(transport, include_welcome=True)
+            await self._send_resident_menu(chat_id)
         elif payload == "back_to_menu":
-            await service.start(transport, include_welcome=True)
+            await self._send_resident_menu(chat_id)
         elif payload == "back_to_menu_status":
             await service.process_text(transport, "Статус заявки")
+
+    async def _send_resident_menu(self, chat_id: int) -> None:
+        await self._client.send_message(
+            chat_id,
+            (
+                "Для обращения в управляющую компанию нажмите кнопку ниже.\n\n"
+                "Заявка откроется во втором MAX-боте. В этом боте можно посмотреть статус уже созданной заявки."
+            ),
+            attachments=self._kb.resident_menu_keyboard(),
+        )
 
     def _make_transport(self, chat_id: int, user_id: int, display_name: str | None) -> DialogTransport:
         client = self._client
@@ -293,11 +337,13 @@ class MaxPolling:
             await client.send_message(chat_id, text, attachments=attachments)
 
         async def _clear_inline_keyboard() -> None:
-            pass  # MAX doesn't require explicit keyboard clearing
+            pass
 
         return DialogTransport(
             platform_user_id=user_id,
             display_name=display_name,
             send_text=_send_text,
             clear_inline_keyboard=_clear_inline_keyboard,
+            platform="max",
+            platform_chat_id=chat_id,
         )

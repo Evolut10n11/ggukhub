@@ -36,8 +36,8 @@ from app.bitrix.payloads import (
 from app.bitrix.webhooks import parse_bitrix_event, verify_bitrix_secret
 from app.config import Settings
 from app.core.models import Report, User
+from app.core.notifier import UserNotifier
 from app.core.storage import Storage
-from app.telegram.notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class BitrixTicketService:
     async def create_ticket(self, report: Report, user: User, contact_id: str | None = None) -> str:
         payload_input = BitrixTicketPayloadInput(
             local_report_id=report.id,
-            telegram_id=user.telegram_id,
+            telegram_id=user.platform_user_id,
             title=build_ticket_title(report),
             description=build_ticket_description(report),
             reporter_name=user.name,
@@ -271,7 +271,7 @@ class BitrixTicketService:
 
 
 class BitrixWebhookService:
-    def __init__(self, settings: Settings, storage: Storage, notifier: TelegramNotifier):
+    def __init__(self, settings: Settings, storage: Storage, notifier: UserNotifier):
         self._settings = settings
         self._storage = storage
         self._notifier = notifier
@@ -306,10 +306,11 @@ class BitrixWebhookService:
         notified = False
         if signature_valid and parsed.status and report_with_user:
             report, user = report_with_user
-            notified = await self._notifier.send_message(
-                telegram_id=user.telegram_id,
-                text=f"Ваша заявка №{report.id} обновлена.\nСтатус: {report_status_label(parsed.status)}",
-            )
+            if user.platform != "max":
+                notified = await self._notifier.send_message(
+                    telegram_id=user.telegram_id,
+                    text=f"Ваша заявка №{report.id} обновлена.\nСтатус: {report_status_label(parsed.status)}",
+                )
 
         return BitrixWebhookResult(
             accepted=signature_valid,

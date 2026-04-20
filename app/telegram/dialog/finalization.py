@@ -11,6 +11,7 @@ from app.bitrix.service import BitrixTicketService
 from app.core.buildings import BuildingRegistry
 from app.core.enums import BitrixSyncStatus, ReportAuditStage
 from app.core.models import Report, User
+from app.core.notifier import UserNotifier
 from app.core.regulation import REGULATION_VERSION, build_bitrix_audit_payload, build_report_composition_payload
 from app.core.schemas import ReportAuditCreate, ReportCreate
 from app.core.storage import Storage
@@ -27,7 +28,6 @@ from app.telegram.dialog.formatters import (
     build_report_summary,
 )
 from app.telegram.dialog.models import DialogSessionData, FinalizedReportDraft
-from app.telegram.notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,8 @@ class DialogReportFinalizer:
         incidents: IncidentService,
         responder: RuleResponder,
         bitrix_service: BitrixTicketService,
-        notifier: TelegramNotifier,
+        notifier: UserNotifier,
+        max_operator_service: Any | None,
         label_resolver: Callable[[str], str],
         building_registry: BuildingRegistry | None = None,
         confirmation_budget_ms: int | None = None,
@@ -81,6 +82,7 @@ class DialogReportFinalizer:
         self._responder = responder
         self._bitrix_service = bitrix_service
         self._notifier = notifier
+        self._max_operator_service = max_operator_service
         self._label_resolver = label_resolver
         self._building_registry = building_registry
         self._confirmation_budget_ms = confirmation_budget_ms
@@ -111,7 +113,7 @@ class DialogReportFinalizer:
         normalized_report = {
             "local_report_id": report.id,
             "user_id": user.id,
-            "telegram_id": user.telegram_id,
+            "platform_user_id": user.platform_user_id,
             "jk": draft.jk,
             "address": draft.address,
             "apartment": draft.apartment,
@@ -132,6 +134,8 @@ class DialogReportFinalizer:
             stage=ReportAuditStage.REPORT_CREATED.value,
             payload=composition_payload,
         )
+        if self._max_operator_service is not None and user.platform == "max":
+            await self._max_operator_service.notify_new_report(report, user)
 
         generated = await self._responder.build_report_created(local_id=report.id, bitrix_id=None)
         mc = self._building_registry.management_company_for(draft.house) if self._building_registry else None
@@ -257,8 +261,8 @@ class DialogReportFinalizer:
             )
             logger.warning("Bitrix ticket creation failed for report %s: %s | %s", report.id, error, telemetry_payload)
             if notify_user:
-                await self._notifier.send_message(
-                    telegram_id=user.telegram_id,
+                await self._notifier.send_user_message(
+                    user,
                     text=(
                         f"Заявка №{report.id} уже сохранена. "
                         "Уточняю передачу вручную и вернусь с обновлением."
@@ -288,7 +292,7 @@ class DialogReportFinalizer:
         else:
             followup = f"Заявка №{report.id} передана диспетчеру. Номер заявки: {bitrix_id}."
         if notify_user:
-            await self._notifier.send_message(telegram_id=user.telegram_id, text=followup)
+            await self._notifier.send_user_message(user, followup)
         return bitrix_id
 
     @staticmethod
@@ -364,7 +368,7 @@ class DialogReportFinalizer:
                 await self._storage.update_user_bitrix_contact_id(user.id, contact_id)
                 user.bitrix_contact_id = contact_id
             return contact_id
-        display_name = user.name or f"Telegram {user.telegram_id}"
+        display_name = user.name or f"{user.platform.title()} {user.platform_user_id}"
         created_contact_id = await self._bitrix_service.create_contact(name=display_name, phone=phone)
         if created_contact_id and str(user.phone or "").strip() == phone:
             await self._storage.update_user_bitrix_contact_id(user.id, created_contact_id)

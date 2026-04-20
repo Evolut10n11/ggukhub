@@ -43,6 +43,8 @@ class AppRuntime:
                 logger.warning("Speech warm-up failed: %s", exc)
 
     async def close(self) -> None:
+        if self.services.max_operator_service is not None:
+            await self.services.max_operator_service.close()
         if hasattr(self.services.speech, "close"):
             self.services.speech.close()
         await self.services.notifier.close()

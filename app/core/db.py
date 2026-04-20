@@ -65,10 +65,17 @@ class DatabaseRuntime:
             "house": "VARCHAR(255)",
             "entrance": "VARCHAR(32)",
             "apartment": "VARCHAR(64)",
+            "messenger_platform": "VARCHAR(32)",
+            "messenger_user_id": "BIGINT",
+            "messenger_chat_id": "BIGINT",
         }
         for col, col_type in new_columns.items():
             if col not in existing:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {col_type}"))  # type: ignore[union-attr]
+        conn.execute(text("UPDATE users SET messenger_user_id = ABS(telegram_id) WHERE messenger_user_id IS NULL"))  # type: ignore[union-attr]
+        conn.execute(  # type: ignore[union-attr]
+            text("CREATE INDEX IF NOT EXISTS ix_users_messenger_identity ON users (messenger_platform, messenger_user_id)")
+        )
 
 
     async def close(self) -> None:

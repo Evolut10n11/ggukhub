@@ -146,14 +146,9 @@ class MaxKeyboardFactory:
         return [_inline_keyboard_attachment(rows)]
 
     def back_to_menu_keyboard(self) -> list[dict[str, Any]]:
-        return self.resident_menu_keyboard()
-
-    def resident_menu_keyboard(self) -> list[dict[str, Any]]:
-        rows: list[list[dict[str, Any]]] = []
-        if self._redirect_bot_url:
-            rows.append([_link_button("📝 Обращение в УК", self._redirect_bot_url)])
-        rows.append([_cb_button("📋 Статус заявки", "back_to_menu_status")])
-        return [_inline_keyboard_attachment(rows)]
+        return [_inline_keyboard_attachment([
+            [_cb_button("🏠 Вернуться в меню", "back_to_menu")],
+        ])]
 
     def operator_report_keyboard(self, report_id: int) -> list[dict[str, Any]]:
         return [_inline_keyboard_attachment([

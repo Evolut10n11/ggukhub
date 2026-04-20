@@ -109,7 +109,9 @@ class MaxPolling:
             )
             await self._send_identity(chat_id, user_id)
             return
-        await self._send_resident_menu(chat_id)
+        transport = self._make_transport(chat_id, user_id, display_name)
+        service = self._get_dialog_service()
+        await service.start(transport, include_welcome=True)
 
     async def _handle_message(self, update: dict[str, Any]) -> None:
         message = update.get("message", {})
@@ -156,7 +158,9 @@ class MaxPolling:
 
         # Handle commands
         if text.lower() in ("/start", "/new"):
-            await self._send_resident_menu(chat_id)
+            transport = self._make_transport(chat_id, user_id, display_name)
+            service = self._get_dialog_service()
+            await service.start(transport, include_welcome=(text.lower() == "/start"))
             return
 
         if text.lower() == "/status":
@@ -312,21 +316,11 @@ class MaxPolling:
         elif payload == "address_reuse_no":
             await service.reject_saved_address(transport)
         elif payload == "new_report":
-            await self._send_resident_menu(chat_id)
+            await service.start(transport, include_welcome=True)
         elif payload == "back_to_menu":
-            await self._send_resident_menu(chat_id)
+            await service.start(transport, include_welcome=True)
         elif payload == "back_to_menu_status":
             await service.process_text(transport, "Статус заявки")
-
-    async def _send_resident_menu(self, chat_id: int) -> None:
-        await self._client.send_message(
-            chat_id,
-            (
-                "Для обращения в управляющую компанию нажмите кнопку ниже.\n\n"
-                "Заявка откроется во втором MAX-боте. В этом боте можно посмотреть статус уже созданной заявки."
-            ),
-            attachments=self._kb.resident_menu_keyboard(),
-        )
 
     def _make_transport(self, chat_id: int, user_id: int, display_name: str | None) -> DialogTransport:
         client = self._client

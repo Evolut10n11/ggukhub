@@ -72,6 +72,8 @@ class MaxKeyboardFactory:
             rows.append(nav)
 
         rows.append([_cb_button(STANDALONE_JK_LABEL, "jk_standalone")])
+        if self._redirect_bot_url:
+            rows.append([_link_button("📝 Обращение в УК", self._redirect_bot_url)])
         rows.append([_cb_button("📋 Статус заявки", "back_to_menu_status")])
         return [_inline_keyboard_attachment(rows)]
 

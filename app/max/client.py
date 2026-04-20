@@ -17,8 +17,8 @@ class MaxApiError(RuntimeError):
 class MaxBotClient:
     """Thin HTTP client for MAX Bot API (platform-api.max.ru)."""
 
-    def __init__(self, settings: Settings) -> None:
-        self._token = settings.max_bot_token
+    def __init__(self, settings: Settings, *, token: str | None = None) -> None:
+        self._token = token or settings.max_bot_token
         self._base = settings.max_api_base_url.rstrip("/")
         # Read timeout must exceed long-polling timeout to avoid premature disconnect
         self._timeout = httpx.Timeout(10.0, read=settings.max_polling_timeout + 15)

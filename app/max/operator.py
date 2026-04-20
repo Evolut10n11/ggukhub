@@ -29,7 +29,9 @@ class MaxOperatorService:
         self._operator_phones = _parse_operator_phones(settings.max_operator_phones)
         self._operator_ids = _parse_operator_ids(settings.max_operator_user_ids)
         has_operator_targets = bool(self._operator_ids or self._operator_phones)
-        self._client = MaxBotClient(settings) if settings.max_enabled and has_operator_targets else None
+        op_token = settings.max_operator_bot_token or settings.max_bot_token
+        can_connect = bool(op_token) and has_operator_targets
+        self._client = MaxBotClient(settings, token=op_token) if can_connect else None
         self._kb = MaxKeyboardFactory()
         self._pending: dict[int, OperatorPendingAction] = {}
 

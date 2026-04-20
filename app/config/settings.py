@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     speech_timeout_seconds: float = Field(default=45.0, alias="SPEECH_TIMEOUT_SECONDS")
 
     max_bot_token: str = Field(default="", alias="MAX_BOT_TOKEN")
+    max_operator_bot_token: str = Field(default="", alias="MAX_OPERATOR_BOT_TOKEN")
     max_api_base_url: str = Field(default="https://platform-api.max.ru", alias="MAX_API_BASE_URL")
     max_polling_timeout: int = Field(default=30, alias="MAX_POLLING_TIMEOUT")
     max_operator_phones: str = Field(default="", alias="MAX_OPERATOR_PHONES")
@@ -129,6 +130,10 @@ class Settings(BaseSettings):
     @property
     def max_enabled(self) -> bool:
         return bool(self.max_bot_token)
+
+    @property
+    def max_operator_bot_enabled(self) -> bool:
+        return bool(self.max_operator_bot_token)
 
     @property
     def bitrix_enabled(self) -> bool:

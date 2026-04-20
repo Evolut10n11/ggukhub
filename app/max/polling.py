@@ -109,14 +109,15 @@ class MaxPolling:
             return
         display_name = user.get("name")
         logger.info("MAX bot_started from user=%s chat=%s", user_id, chat_id)
-        operator_service = self._get_operator_service()
-        if operator_service is not None and await self._is_operator(operator_service, user_id):
-            await self._client.send_message(
-                chat_id,
-                "Режим оператора активен. Напишите /queue, чтобы увидеть открытые заявки. Чтобы узнать свой MAX user_id, отправьте /id.",
-            )
-            await self._send_identity(chat_id, user_id)
-            return
+        if not self._settings.max_operator_bot_enabled:
+            operator_service = self._get_operator_service()
+            if operator_service is not None and await self._is_operator(operator_service, user_id):
+                await self._client.send_message(
+                    chat_id,
+                    "Режим оператора активен. Напишите /queue, чтобы увидеть открытые заявки. Чтобы узнать свой MAX user_id, отправьте /id.",
+                )
+                await self._send_identity(chat_id, user_id)
+                return
         transport = self._make_transport(chat_id, user_id, display_name)
         service = self._get_dialog_service()
         await service.start(transport, include_welcome=True)
@@ -158,11 +159,12 @@ class MaxPolling:
             await self._send_identity(chat_id, user_id)
             return
 
-        operator_service = self._get_operator_service()
-        if operator_service is not None:
-            handled = await operator_service.handle_operator_message(chat_id, user_id, text)
-            if handled:
-                return
+        if not self._settings.max_operator_bot_enabled:
+            operator_service = self._get_operator_service()
+            if operator_service is not None:
+                handled = await operator_service.handle_operator_message(chat_id, user_id, text)
+                if handled:
+                    return
 
         if text.lower() in ("/start", "/new"):
             transport = self._make_transport(chat_id, user_id, display_name)
@@ -265,11 +267,12 @@ class MaxPolling:
             except Exception:
                 pass
 
-        operator_service = self._get_operator_service()
-        if operator_service is not None:
-            handled = await operator_service.handle_operator_callback(chat_id, user_id, payload)
-            if handled:
-                return
+        if not self._settings.max_operator_bot_enabled:
+            operator_service = self._get_operator_service()
+            if operator_service is not None:
+                handled = await operator_service.handle_operator_callback(chat_id, user_id, payload)
+                if handled:
+                    return
 
         if payload.startswith("jk_pick:"):
             idx = int(payload.split(":", 1)[1])

@@ -145,8 +145,17 @@ def test_max_shared_inline_keyboards_match_telegram() -> None:
     complexes = [f"Complex {index}" for index in range(10)]
     houses = [HouseInfo(address=f"Дом {index}", entrances=4, apartments=20) for index in range(10)]
 
-    assert _max_rows(max_factory.jk_keyboard(complexes, page=0)) == _tg_rows(build_jk_keyboard(complexes, page=0))
-    assert _max_rows(max_factory.jk_keyboard(complexes, page=1)) == _tg_rows(build_jk_keyboard(complexes, page=1))
+    # jk_keyboard: MAX has extra "Обращение в УК" row at the end
+    max_jk_0 = _max_rows(max_factory.jk_keyboard(complexes, page=0))
+    tg_jk_0 = _tg_rows(build_jk_keyboard(complexes, page=0))
+    assert max_jk_0[:-1] == tg_jk_0
+    assert max_jk_0[-1] == [("📞 Обращение в УК", "contact_operator")]
+
+    max_jk_1 = _max_rows(max_factory.jk_keyboard(complexes, page=1))
+    tg_jk_1 = _tg_rows(build_jk_keyboard(complexes, page=1))
+    assert max_jk_1[:-1] == tg_jk_1
+    assert max_jk_1[-1] == [("📞 Обращение в УК", "contact_operator")]
+
     assert _max_rows(max_factory.house_keyboard(houses, page=0)) == _tg_rows(build_house_keyboard(houses, page=0))
     assert _max_rows(max_factory.house_keyboard(houses, page=1)) == _tg_rows(build_house_keyboard(houses, page=1))
     assert _max_rows(max_factory.entrance_keyboard(6)) == _tg_rows(build_entrance_keyboard(6))
@@ -154,8 +163,17 @@ def test_max_shared_inline_keyboards_match_telegram() -> None:
     assert _max_rows(max_factory.category_select_keyboard()) == _tg_rows(build_category_select_keyboard())
     assert _max_rows(max_factory.report_confirm_keyboard()) == _tg_rows(build_report_confirm_keyboard())
     assert _max_rows(max_factory.phone_reuse_keyboard("+79990001122")) == _tg_rows(build_phone_reuse_keyboard("+79990001122"))
-    assert _max_rows(max_factory.new_report_keyboard()) == _tg_rows(telegram_factory.new_report_keyboard())
-    assert _max_rows(max_factory.back_to_menu_keyboard()) == _tg_rows(telegram_factory.back_to_menu_keyboard())
+
+    # new_report and back_to_menu: MAX has extra "Обращение в УК" row
+    max_new = _max_rows(max_factory.new_report_keyboard())
+    tg_new = _tg_rows(telegram_factory.new_report_keyboard())
+    assert max_new[:-1] == tg_new
+    assert max_new[-1] == [("📞 Обращение в УК", "contact_operator")]
+
+    max_back = _max_rows(max_factory.back_to_menu_keyboard())
+    tg_back = _tg_rows(telegram_factory.back_to_menu_keyboard())
+    assert max_back[:-1] == tg_back
+    assert max_back[-1] == [("📞 Обращение в УК", "contact_operator")]
 
 
 @pytest.mark.asyncio

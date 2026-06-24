@@ -23,7 +23,11 @@ def process_lock(lock_file: Path) -> Iterator[None]:
     lock_file.parent.mkdir(parents=True, exist_ok=True)
     if lock_file.exists():
         raw = lock_file.read_text(encoding="utf-8").strip()
-        if raw.isdigit() and _is_process_alive(int(raw)):
+        # A lock owning *our own* pid cannot be a competing live instance — it is
+        # a stale leftover. This is the common case in a container, where the bot
+        # is always pid 1: after a non-graceful exit the pid=1 lock survives the
+        # restart and os.kill(1, 0) always succeeds, deadlocking every start.
+        if raw.isdigit() and int(raw) != os.getpid() and _is_process_alive(int(raw)):
             raise RuntimeError(
                 f"Process lock is already held (pid={raw}). "
                 "Stop the running instance before starting a new one."

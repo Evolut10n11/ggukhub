@@ -15,7 +15,7 @@ class MaxApiError(RuntimeError):
 
 
 class MaxBotClient:
-    """Thin HTTP client for MAX Bot API (platform-api.max.ru)."""
+    """Thin HTTP client for MAX Bot API (platform-api2.max.ru)."""
 
     def __init__(self, settings: Settings, *, token: str | None = None) -> None:
         self._token = token or settings.max_bot_token

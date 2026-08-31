@@ -49,10 +49,13 @@ class MaxBotClient:
         *,
         attachments: list[dict[str, Any]] | None = None,
         format: str = "markdown",
+        reply_to_mid: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {"text": text, "format": format}
         if attachments:
             body["attachments"] = attachments
+        if reply_to_mid:
+            body["link"] = {"type": "reply", "mid": reply_to_mid}
         return await self._post("messages", params={"chat_id": chat_id}, json=body)
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> dict[str, Any]:

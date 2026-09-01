@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from collections import OrderedDict
 from typing import Any
 
@@ -22,6 +23,7 @@ from app.telegram.dialog.service import DialogService
 logger = logging.getLogger(__name__)
 
 _DEDUPLICATION_WINDOW = 4096
+_ACTIVE_GROUP_DIALOG_TTL_SECONDS = 30 * 60
 _HELP_TEXT = (
     "Я помогу оформить обращение в управляющую компанию.\n\n"
     "Команды:\n"
@@ -103,6 +105,7 @@ class MaxPolling:
         self._dialog_service: DialogService | None = None
         self._identity = MaxBotIdentity(settings.max_bot_id, settings.max_bot_username)
         self._seen_updates: OrderedDict[str, None] = OrderedDict()
+        self._active_group_dialogs: dict[tuple[str, str], float] = {}
 
     def _get_dialog_service(self) -> DialogService:
         if self._dialog_service is None:
@@ -177,7 +180,9 @@ class MaxPolling:
         decision = route_max_update(update, self._identity)
         logger.debug("%s update_type=%s", decision.reason, update_type)
         if not decision.accepted:
-            return
+            decision = await self._resume_active_group_dialog(update, decision)
+            if not decision.accepted:
+                return
 
         if decision.action == "message" or decision.action == "help":
             await self._handle_message(update, decision)
@@ -185,6 +190,66 @@ class MaxPolling:
             await self._handle_callback(update)
         elif decision.action == "bot_started":
             await self._handle_bot_started(update)
+
+        await self._sync_active_group_dialog(update)
+
+    async def _resume_active_group_dialog(
+        self,
+        update: dict[str, Any],
+        decision: MaxRouteDecision,
+    ) -> MaxRouteDecision:
+        if decision.reason != "ignored_unaddressed_group_message":
+            return decision
+
+        context = self._group_dialog_context(update)
+        if context is None:
+            return decision
+
+        last_activity = self._active_group_dialogs.get(context)
+        if last_activity is None:
+            return decision
+        if time.monotonic() - last_activity > _ACTIVE_GROUP_DIALOG_TTL_SECONDS:
+            self._active_group_dialogs.pop(context, None)
+            return decision
+
+        message = update.get("message", {})
+        text = str(message.get("body", {}).get("text") or "").strip()
+        logger.debug("accepted_active_group_dialog chat_id=%s user_id=%s", *context)
+        return MaxRouteDecision(
+            action="message",
+            reason="accepted_active_group_dialog",
+            text=text,
+            chat_type=decision.chat_type,
+            message_id=decision.message_id,
+        )
+
+    async def _sync_active_group_dialog(self, update: dict[str, Any]) -> None:
+        context = self._group_dialog_context(update)
+        if context is None:
+            return
+
+        _, platform_user_id = context
+        service = self._get_dialog_service()
+        if await service.has_active_dialog("max", int(platform_user_id)):
+            self._active_group_dialogs[context] = time.monotonic()
+        else:
+            self._active_group_dialogs.pop(context, None)
+
+    @staticmethod
+    def _group_dialog_context(update: dict[str, Any]) -> tuple[str, str] | None:
+        message = update.get("message", {})
+        recipient = message.get("recipient", {})
+        if str(recipient.get("chat_type") or "").casefold() != "chat":
+            return None
+
+        chat_id = recipient.get("chat_id")
+        if update.get("update_type") == "message_callback":
+            user_id = update.get("callback", {}).get("user", {}).get("user_id")
+        else:
+            user_id = message.get("sender", {}).get("user_id")
+        if chat_id is None or user_id is None:
+            return None
+        return str(chat_id), str(user_id)
 
     def _remember_update(self, key: str) -> bool:
         if key in self._seen_updates:

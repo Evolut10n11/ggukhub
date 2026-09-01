@@ -35,6 +35,7 @@ def _tg_rows(markup) -> list[list[tuple[str, str]]]:
 class _DialogServiceStub:
     def __init__(self) -> None:
         self.calls: list[tuple[str, object]] = []
+        self.active_dialog = False
 
     async def select_housing_complex(self, transport, complex_name: str) -> None:
         _ = transport
@@ -90,11 +91,16 @@ class _DialogServiceStub:
 
     async def start(self, transport, *, include_welcome: bool) -> None:
         _ = transport
+        self.active_dialog = True
         self.calls.append(("start", include_welcome))
 
     async def process_text(self, transport, text: str, from_voice: bool = False) -> None:
         _ = transport, from_voice
         self.calls.append(("process_text", text))
+
+    async def has_active_dialog(self, platform: str, platform_user_id: int) -> bool:
+        _ = platform, platform_user_id
+        return self.active_dialog
 
 
 class _MaxClientStub:
@@ -338,6 +344,7 @@ class _RespondingDialogServiceStub(_DialogServiceStub):
         await transport.send_text("Ответ", None)
 
     async def start(self, transport, *, include_welcome: bool) -> None:
+        self.active_dialog = True
         self.calls.append(("start", include_welcome))
         await transport.send_text("Начинаем заявку", None)
 
@@ -360,6 +367,31 @@ async def test_max_polling_gate_blocks_group_chatter_before_dialog_and_llm() -> 
     await poller._handle_update(_message_update("У меня не работает домофон"))
     assert dialog.calls == []
     assert client.sent_messages == []
+
+
+@pytest.mark.asyncio
+async def test_max_group_dialog_accepts_plain_text_after_request_started() -> None:
+    poller, dialog, client = _routing_poller()
+    await poller._handle_update(_message_update("/заявка", mid="mid-start"))
+
+    await poller._handle_update(_message_update("42", mid="mid-apartment"))
+
+    assert dialog.calls == [("start", False), ("process_text", "42")]
+    assert len(client.sent_messages) == 2
+    assert client.sent_messages[1]["reply_to_mid"] == "mid-apartment"
+
+
+@pytest.mark.asyncio
+async def test_max_active_group_dialog_is_scoped_to_initiating_user() -> None:
+    poller, dialog, client = _routing_poller()
+    await poller._handle_update(_message_update("/заявка", mid="mid-start"))
+
+    await poller._handle_update(
+        _message_update("сообщение другого участника", mid="mid-other", sender_id=101)
+    )
+
+    assert dialog.calls == [("start", False)]
+    assert len(client.sent_messages) == 1
 
 
 @pytest.mark.asyncio

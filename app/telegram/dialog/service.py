@@ -196,6 +196,17 @@ class DialogService:
             return None
         return self._get_current_house_list(snapshot.data)
 
+    async def has_active_dialog(self, platform: str, platform_user_id: int) -> bool:
+        """Return whether the user is currently filling out a request."""
+        user = await self._deps.storage.get_user_by_platform_id(
+            platform=platform,
+            platform_user_id=platform_user_id,
+        )
+        if not user:
+            return False
+        snapshot = await self._load_snapshot(user.id)
+        return snapshot.step != DialogStep.IDLE
+
     async def paginate_houses(self, transport: DialogTransport, page: int) -> None:
         user = await self._upsert_user(transport)
         async with self._runtime.user_lock(user.id):

@@ -2,16 +2,92 @@
 
 import asyncio
 import logging
+from collections import OrderedDict
 from typing import Any
 
 from app.config import Settings
 from app.core.services import AppServices
 from app.max.client import MaxApiError, MaxBotClient
 from app.max.keyboards import MaxKeyboardFactory
+from app.max.routing import (
+    MAX_COMMANDS,
+    MaxBotIdentity,
+    MaxRouteDecision,
+    route_max_update,
+    update_deduplication_key,
+)
 from app.telegram.dialog.models import DialogTransport
 from app.telegram.dialog.service import DialogService
 
 logger = logging.getLogger(__name__)
+
+_DEDUPLICATION_WINDOW = 4096
+_HELP_TEXT = (
+    "Я помогу оформить обращение в управляющую компанию.\n\n"
+    "Команды:\n"
+    "/помощь — эта справка\n"
+    "/авария — аварийное обращение\n"
+    "/заявка — обычная заявка\n"
+    "/домофон, /лифт, /уборка, /вода, /отопление — тематическая заявка"
+)
+_THEMATIC_COMMAND_TEXT = {
+    "авария": "Аварийная ситуация в доме",
+    "домофон": "Не работает домофон",
+    "лифт": "Не работает лифт",
+    "уборка": "Не выполнена уборка в доме",
+    "вода": "Проблема с водоснабжением",
+    "отопление": "Проблема с отоплением",
+}
+
+
+class _BufferedMaxTransport:
+    """Collect all dialog output and emit one MAX message for one input event."""
+
+    def __init__(
+        self,
+        *,
+        client: MaxBotClient,
+        chat_id: int,
+        user_id: int,
+        display_name: str | None,
+        reply_to_mid: str | None,
+    ) -> None:
+        self.platform_user_id = user_id
+        self.display_name = display_name
+        self.platform = "max"
+        self.platform_chat_id = chat_id
+        self._client = client
+        self._chat_id = chat_id
+        self._reply_to_mid = reply_to_mid
+        self._messages: list[tuple[str, Any | None]] = []
+
+    async def send_text(self, text: str, reply_markup: Any | None) -> None:
+        self._messages.append((text, reply_markup))
+
+    async def clear_inline_keyboard(self) -> None:
+        return None
+
+    async def flush(self) -> None:
+        if not self._messages:
+            return
+        text = "\n\n".join(part.strip() for part, _ in self._messages if part.strip())
+        reply_markup = next(
+            (markup for _, markup in reversed(self._messages) if markup is not None),
+            None,
+        )
+        attachments = reply_markup if isinstance(reply_markup, list) else None
+        logger.debug(
+            "MAX response chat_id=%s parts=%s attachments=%s reply=%s",
+            self._chat_id,
+            len(self._messages),
+            bool(attachments),
+            bool(self._reply_to_mid),
+        )
+        kwargs: dict[str, Any] = {"attachments": attachments}
+        if self._reply_to_mid:
+            kwargs["reply_to_mid"] = self._reply_to_mid
+        await self._client.send_message(self._chat_id, text, **kwargs)
+        self._messages.clear()
 
 
 class MaxPolling:
@@ -25,6 +101,8 @@ class MaxPolling:
         self._marker: int | None = None
         self._running = False
         self._dialog_service: DialogService | None = None
+        self._identity = MaxBotIdentity(settings.max_bot_id, settings.max_bot_username)
+        self._seen_updates: OrderedDict[str, None] = OrderedDict()
 
     def _get_dialog_service(self) -> DialogService:
         if self._dialog_service is None:
@@ -35,12 +113,22 @@ class MaxPolling:
         return getattr(self._services, "max_operator_service", None)
 
     async def start(self) -> None:
-        me = await self._client.get_me()
-        bot_name = me.get("name", me.get("username", "MAX Bot"))
-        logger.info("MAX bot started: %s", bot_name)
+        try:
+            me = await self._client.get_me()
+        except Exception:
+            if self._identity.user_id is None or not self._identity.username:
+                raise
+            logger.warning("MAX GET /me failed; using configured bot identity")
+        else:
+            self._identity = MaxBotIdentity(
+                user_id=me.get("user_id") or self._identity.user_id,
+                username=me.get("username") or self._identity.username,
+            )
+        logger.info("MAX bot started: user_id=%s", self._identity.user_id)
         try:
             await self._client.set_commands(
                 [
+                    *MAX_COMMANDS,
                     {"name": "start", "description": "Начать работу с ботом"},
                     {"name": "new", "description": "Создать новую заявку"},
                     {"name": "status", "description": "Статус последней заявки"},
@@ -81,16 +169,31 @@ class MaxPolling:
 
     async def _handle_update(self, update: dict[str, Any]) -> None:
         update_type = update.get("update_type")
-        logger.debug("MAX update: type=%s data=%s", update_type, update)
+        deduplication_key = update_deduplication_key(update)
+        if deduplication_key and not self._remember_update(deduplication_key):
+            logger.debug("duplicate_update update_type=%s", update_type)
+            return
 
-        if update_type == "message_created":
-            await self._handle_message(update)
-        elif update_type == "message_callback":
+        decision = route_max_update(update, self._identity)
+        logger.debug("%s update_type=%s", decision.reason, update_type)
+        if not decision.accepted:
+            return
+
+        if decision.action == "message" or decision.action == "help":
+            await self._handle_message(update, decision)
+        elif decision.action == "callback":
             await self._handle_callback(update)
-        elif update_type == "bot_started":
+        elif decision.action == "bot_started":
             await self._handle_bot_started(update)
-        else:
-            logger.debug("Ignoring MAX update type: %s", update_type)
+
+    def _remember_update(self, key: str) -> bool:
+        if key in self._seen_updates:
+            self._seen_updates.move_to_end(key)
+            return False
+        self._seen_updates[key] = None
+        if len(self._seen_updates) > _DEDUPLICATION_WINDOW:
+            self._seen_updates.popitem(last=False)
+        return True
 
     async def _handle_bot_started(self, update: dict[str, Any]) -> None:
         """Handle 'bot_started' event when user opens chat or presses Start."""
@@ -105,15 +208,21 @@ class MaxPolling:
         if operator_service is not None and operator_service.is_operator(user_id):
             await self._client.send_message(
                 chat_id,
-                "Режим оператора активен. Напишите /queue, чтобы увидеть открытые заявки. Чтобы узнать свой MAX user_id, отправьте /id.",
+                "Режим оператора активен. Напишите /queue, чтобы увидеть открытые заявки.\n"
+                f"Ваш MAX user_id: `{user_id}`",
             )
-            await self._send_identity(chat_id, user_id)
             return
         transport = self._make_transport(chat_id, user_id, display_name)
         service = self._get_dialog_service()
         await service.start(transport, include_welcome=True)
+        await transport.flush()
 
-    async def _handle_message(self, update: dict[str, Any]) -> None:
+    async def _handle_message(
+        self, update: dict[str, Any], decision: MaxRouteDecision | None = None
+    ) -> None:
+        decision = decision or route_max_update(update, self._identity)
+        if not decision.accepted:
+            return
         message = update.get("message", {})
         sender = message.get("sender", {})
         user_id = sender.get("user_id")
@@ -121,7 +230,7 @@ class MaxPolling:
             return
 
         body = message.get("body", {})
-        text = body.get("text", "").strip()
+        text = decision.text
         chat_id = message.get("recipient", {}).get("chat_id")
         if not chat_id:
             return
@@ -136,15 +245,47 @@ class MaxPolling:
                 audio_url = att.get("payload", {}).get("url") or att.get("url")
                 break
 
+        reply_to_mid = decision.message_id if decision.chat_type == "chat" else None
+
+        if decision.action == "help":
+            await self._send_direct_message(chat_id, _HELP_TEXT, reply_to_mid=reply_to_mid)
+            return
+
         if audio_url and self._services.speech.enabled:
-            await self._handle_voice(chat_id, user_id, display_name, audio_url)
+            await self._handle_voice(
+                chat_id, user_id, display_name, audio_url, reply_to_mid=reply_to_mid
+            )
             return
 
         if not text:
-            await self._client.send_message(chat_id, "Я принимаю только текстовые и голосовые сообщения.")
+            await self._send_direct_message(
+                chat_id,
+                "Я принимаю только текстовые и голосовые сообщения.",
+                reply_to_mid=reply_to_mid,
+            )
             return
 
-        logger.info("MAX message from user=%s chat=%s text=%r", user_id, chat_id, text[:100])
+        logger.info("MAX message accepted user=%s chat=%s reason=%s", user_id, chat_id, decision.reason)
+
+        transport = self._make_transport(
+            chat_id, user_id, display_name, reply_to_mid=reply_to_mid
+        )
+        service = self._get_dialog_service()
+
+        if decision.command == "помощь":
+            await self._send_direct_message(chat_id, _HELP_TEXT, reply_to_mid=reply_to_mid)
+            return
+        if decision.command == "заявка":
+            await service.start(transport, include_welcome=False)
+            await transport.flush()
+            return
+        if decision.command in _THEMATIC_COMMAND_TEXT:
+            scenario_text = _THEMATIC_COMMAND_TEXT[decision.command]
+            if decision.command_args:
+                scenario_text = f"{scenario_text}: {decision.command_args}"
+            await service.process_text(transport, scenario_text)
+            await transport.flush()
+            return
 
         if text.lower() in {"/id", "/myid", "/userid"}:
             await self._send_identity(chat_id, user_id)
@@ -158,15 +299,13 @@ class MaxPolling:
 
         # Handle commands
         if text.lower() in ("/start", "/new"):
-            transport = self._make_transport(chat_id, user_id, display_name)
-            service = self._get_dialog_service()
             await service.start(transport, include_welcome=(text.lower() == "/start"))
+            await transport.flush()
             return
 
         if text.lower() == "/status":
-            transport = self._make_transport(chat_id, user_id, display_name)
-            service = self._get_dialog_service()
             await service.process_text(transport, "Статус заявки")
+            await transport.flush()
             return
 
         if text.startswith("/"):
@@ -177,15 +316,21 @@ class MaxPolling:
             return
 
         # Regular text
-        transport = self._make_transport(chat_id, user_id, display_name)
-        service = self._get_dialog_service()
         await service.process_text(transport, text)
+        await transport.flush()
 
     async def _send_identity(self, chat_id: int, user_id: int) -> None:
         await self._client.send_message(chat_id, f"Ваш MAX user_id: `{user_id}`")
 
-    async def _handle_voice(self, chat_id: int, user_id: int, display_name: str | None, audio_url: str) -> None:
-        await self._client.send_message(chat_id, "Приняла голосовое. Распознаю и сразу продолжу оформление заявки.")
+    async def _handle_voice(
+        self,
+        chat_id: int,
+        user_id: int,
+        display_name: str | None,
+        audio_url: str,
+        *,
+        reply_to_mid: str | None = None,
+    ) -> None:
         try:
             import httpx as _httpx
 
@@ -201,18 +346,28 @@ class MaxPolling:
             )
         except Exception as e:
             logger.warning("MAX voice recognition failed: %s", e)
-            await self._client.send_message(chat_id, "Не получилось распознать голосовое. Напишите текстом.")
+            await self._send_direct_message(
+                chat_id,
+                "Не получилось распознать голосовое. Напишите текстом.",
+                reply_to_mid=reply_to_mid,
+            )
             return
 
         text = recognized.strip()
         if not text:
-            await self._client.send_message(chat_id, "Не расслышала текст. Повторите или напишите сообщением.")
+            await self._send_direct_message(
+                chat_id,
+                "Не расслышала текст. Повторите или напишите сообщением.",
+                reply_to_mid=reply_to_mid,
+            )
             return
 
-        await self._client.send_message(chat_id, f"Распознала так: «{text}».")
-        transport = self._make_transport(chat_id, user_id, display_name)
+        transport = self._make_transport(
+            chat_id, user_id, display_name, reply_to_mid=reply_to_mid
+        )
         service = self._get_dialog_service()
         await service.process_text(transport, text, from_voice=True)
+        await transport.flush()
 
     async def _send_jk_page(self, transport: DialogTransport, page: int) -> None:
         await transport.send_text(
@@ -250,7 +405,14 @@ class MaxPolling:
             return
 
         display_name = user.get("name")
-        transport = self._make_transport(chat_id, user_id, display_name)
+        callback_message_id = message.get("body", {}).get("mid")
+        chat_type = str(message.get("recipient", {}).get("chat_type") or "").casefold()
+        transport = self._make_transport(
+            chat_id,
+            user_id,
+            display_name,
+            reply_to_mid=callback_message_id if chat_type == "chat" else None,
+        )
         service = self._get_dialog_service()
 
         if callback_id:
@@ -322,22 +484,28 @@ class MaxPolling:
         elif payload == "back_to_menu_status":
             await service.process_text(transport, "Статус заявки")
 
-    def _make_transport(self, chat_id: int, user_id: int, display_name: str | None) -> DialogTransport:
-        client = self._client
+        await transport.flush()
 
-        async def _send_text(text: str, reply_markup: Any | None) -> None:
-            attachments = reply_markup if isinstance(reply_markup, list) else None
-            logger.debug("MAX send to chat=%s attachments=%s text=%r", chat_id, bool(attachments), text[:80])
-            await client.send_message(chat_id, text, attachments=attachments)
+    async def _send_direct_message(
+        self, chat_id: int, text: str, *, reply_to_mid: str | None = None
+    ) -> None:
+        kwargs: dict[str, Any] = {}
+        if reply_to_mid:
+            kwargs["reply_to_mid"] = reply_to_mid
+        await self._client.send_message(chat_id, text, **kwargs)
 
-        async def _clear_inline_keyboard() -> None:
-            pass
-
-        return DialogTransport(
-            platform_user_id=user_id,
+    def _make_transport(
+        self,
+        chat_id: int,
+        user_id: int,
+        display_name: str | None,
+        *,
+        reply_to_mid: str | None = None,
+    ) -> _BufferedMaxTransport:
+        return _BufferedMaxTransport(
+            client=self._client,
+            chat_id=chat_id,
+            user_id=user_id,
             display_name=display_name,
-            send_text=_send_text,
-            clear_inline_keyboard=_clear_inline_keyboard,
-            platform="max",
-            platform_chat_id=chat_id,
+            reply_to_mid=reply_to_mid,
         )

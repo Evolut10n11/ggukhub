@@ -1,0 +1,387 @@
+{
+  "app/__init__.py": {
+    "mtime": 1772696860.3926647,
+    "ast_hash": "3f5e5b0d9899d7db496017aff5ad9b78",
+    "semantic_hash": ""
+  },
+  "app/bitrix/__init__.py": {
+    "mtime": 1772698131.012966,
+    "ast_hash": "8325afb022e3780330ebc2d9db962b8d",
+    "semantic_hash": ""
+  },
+  "app/bitrix/client.py": {
+    "mtime": 1782302264.4309027,
+    "ast_hash": "802f5510cc47304b8815eeb0d5d5cbbf",
+    "semantic_hash": ""
+  },
+  "app/bitrix/formatters.py": {
+    "mtime": 1782302264.4309027,
+    "ast_hash": "e9c60164ac0e537bff1356c0cff9c126",
+    "semantic_hash": ""
+  },
+  "app/bitrix/models.py": {
+    "mtime": 1782302264.4319031,
+    "ast_hash": "6efacf65cedf1054e4e10182cdb49805",
+    "semantic_hash": ""
+  },
+  "app/bitrix/payloads.py": {
+    "mtime": 1782302264.4329033,
+    "ast_hash": "103d3737b1f2127ec6f35a266a17e4df",
+    "semantic_hash": ""
+  },
+  "app/bitrix/service.py": {
+    "mtime": 1782303117.688946,
+    "ast_hash": "11da2e58b6b18259718b01c409f3fb5b",
+    "semantic_hash": ""
+  },
+  "app/bitrix/webhooks.py": {
+    "mtime": 1782303117.689947,
+    "ast_hash": "1a6d68bf4580fc1e5ecfc9e918b9cdb0",
+    "semantic_hash": ""
+  },
+  "app/config/__init__.py": {
+    "mtime": 1772696865.7475955,
+    "ast_hash": "a27a7f67b23b2c73f557f1aeb14a98d9",
+    "semantic_hash": ""
+  },
+  "app/config/settings.py": {
+    "mtime": 1788173576.7237737,
+    "ast_hash": "c1dd55d20ccd73f85da02a00a70492c5",
+    "semantic_hash": ""
+  },
+  "app/core/__init__.py": {
+    "mtime": 1772697421.9434335,
+    "ast_hash": "91273498dd0b71fc3fcf6fe5201b862a",
+    "semantic_hash": ""
+  },
+  "app/core/bootstrap.py": {
+    "mtime": 1782303117.691947,
+    "ast_hash": "76d36b6c43c41117525b761b2dde1d0d",
+    "semantic_hash": ""
+  },
+  "app/core/buildings.py": {
+    "mtime": 1774353392.2703955,
+    "ast_hash": "a01fd9b961f3025c0c66f874ec4f765a",
+    "semantic_hash": ""
+  },
+  "app/core/classifier.py": {
+    "mtime": 1774350409.5585186,
+    "ast_hash": "9a0da86b3ed75774381290bda6544e8b",
+    "semantic_hash": ""
+  },
+  "app/core/db.py": {
+    "mtime": 1782303117.692947,
+    "ast_hash": "350c1fc115e4b4cd1e826217ccd473ff",
+    "semantic_hash": ""
+  },
+  "app/core/enums.py": {
+    "mtime": 1774866166.1398377,
+    "ast_hash": "ef12039ae148b653565048695b252dfb",
+    "semantic_hash": ""
+  },
+  "app/core/logging_setup.py": {
+    "mtime": 1774338290.2107341,
+    "ast_hash": "f3635373507531b33d70967c369ffd48",
+    "semantic_hash": ""
+  },
+  "app/core/models.py": {
+    "mtime": 1782303117.6939473,
+    "ast_hash": "cdfa13bb117d29142ed3b04e778c2413",
+    "semantic_hash": ""
+  },
+  "app/core/process_lock.py": {
+    "mtime": 1782303117.6949475,
+    "ast_hash": "aaaa6a1eb2f8884412a5bf64f9194e2d",
+    "semantic_hash": ""
+  },
+  "app/core/regulation.py": {
+    "mtime": 1773132241.4034324,
+    "ast_hash": "a3683639a1da6834fa7878742bb03431",
+    "semantic_hash": ""
+  },
+  "app/core/runtime.py": {
+    "mtime": 1782303117.6949475,
+    "ast_hash": "32927cbcffb8df74ae1311e527e8ee81",
+    "semantic_hash": ""
+  },
+  "app/core/schemas.py": {
+    "mtime": 1774595835.3850858,
+    "ast_hash": "a27ef2f0835840aabb72c1c4e17c5d69",
+    "semantic_hash": ""
+  },
+  "app/core/services.py": {
+    "mtime": 1782303117.695948,
+    "ast_hash": "3401d21b74af9f4a9b684a370577f9f1",
+    "semantic_hash": ""
+  },
+  "app/core/storage.py": {
+    "mtime": 1782303117.69695,
+    "ast_hash": "70576d9b52715935aa4b683f655b98ff",
+    "semantic_hash": ""
+  },
+  "app/core/tariffs.py": {
+    "mtime": 1772696991.4243894,
+    "ast_hash": "d0cc746ce307d83bea299371a9a94cb6",
+    "semantic_hash": ""
+  },
+  "app/core/telemetry.py": {
+    "mtime": 1773131215.7384336,
+    "ast_hash": "98f97dc54bb987d9c04dd54465e779a3",
+    "semantic_hash": ""
+  },
+  "app/core/utils.py": {
+    "mtime": 1774595826.9863873,
+    "ast_hash": "f585b61a74238808c140c7adc8b31bc2",
+    "semantic_hash": ""
+  },
+  "app/incidents/__init__.py": {
+    "mtime": 1772697430.0467043,
+    "ast_hash": "2f8bb6c43005b53f325e95273b636126",
+    "semantic_hash": ""
+  },
+  "app/incidents/detector.py": {
+    "mtime": 1772699652.1757226,
+    "ast_hash": "19055e7af425b7a9dc2b6a2ba8d134d4",
+    "semantic_hash": ""
+  },
+  "app/incidents/service.py": {
+    "mtime": 1773123945.6775763,
+    "ast_hash": "c4513f0906047e0915ac5b832124e9bf",
+    "semantic_hash": ""
+  },
+  "app/main.py": {
+    "mtime": 1782302264.4455643,
+    "ast_hash": "f8e79fe4d343d58675e4357e0acc3ca3",
+    "semantic_hash": ""
+  },
+  "app/max/__init__.py": {
+    "mtime": 1774334401.604821,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/max/client.py": {
+    "mtime": 1788173576.7257657,
+    "ast_hash": "c41b04dbe1f5c02550ee900d00857875",
+    "semantic_hash": ""
+  },
+  "app/max/keyboards.py": {
+    "mtime": 1782303117.6989484,
+    "ast_hash": "32002ef344649c7a6649db1eb5098aab",
+    "semantic_hash": ""
+  },
+  "app/max/polling.py": {
+    "mtime": 1788173857.8907874,
+    "ast_hash": "2f55f9a3643c98fd56cce207d7d129b4",
+    "semantic_hash": ""
+  },
+  "app/max/routing.py": {
+    "mtime": 1788173857.8897867,
+    "ast_hash": "0c57da315f6be706bc270ecec57893c7",
+    "semantic_hash": ""
+  },
+  "app/responders/__init__.py": {
+    "mtime": 1774596027.1320474,
+    "ast_hash": "a593b92519277e3e3e4606b8656d5fa5",
+    "semantic_hash": ""
+  },
+  "app/responders/models.py": {
+    "mtime": 1773987928.166478,
+    "ast_hash": "499e5b985f5daf66ec5a3eca018c7094",
+    "semantic_hash": ""
+  },
+  "app/responders/rule_responder.py": {
+    "mtime": 1782302264.4510744,
+    "ast_hash": "714a14a804fea2dc71f127b8231f59e7",
+    "semantic_hash": ""
+  },
+  "app/run_api.py": {
+    "mtime": 1773384041.1327772,
+    "ast_hash": "d90a3a83635658161c782cba8116668a",
+    "semantic_hash": ""
+  },
+  "app/run_bot.py": {
+    "mtime": 1773384041.133778,
+    "ast_hash": "3e9b05a092a4b1cef116089c3129e642",
+    "semantic_hash": ""
+  },
+  "app/run_stack.py": {
+    "mtime": 1782302264.4520743,
+    "ast_hash": "6594f42d657ea0855155ed4046d6a6eb",
+    "semantic_hash": ""
+  },
+  "app/speech/__init__.py": {
+    "mtime": 1774596028.9029033,
+    "ast_hash": "aef5c3b91737e928efef61a877ab2e6d",
+    "semantic_hash": ""
+  },
+  "app/speech/client.py": {
+    "mtime": 1782302264.454076,
+    "ast_hash": "d486c9cc2a76056680524ab4ccea0c1e",
+    "semantic_hash": ""
+  },
+  "app/telegram/__init__.py": {
+    "mtime": 1772698135.1630404,
+    "ast_hash": "e0b04df2c8e46af365907b65e630c675",
+    "semantic_hash": ""
+  },
+  "app/telegram/bot.py": {
+    "mtime": 1773140611.1069386,
+    "ast_hash": "a36fb9c4ba301b3aed4e46430fb6a223",
+    "semantic_hash": ""
+  },
+  "app/telegram/constants.py": {
+    "mtime": 1782302264.4550757,
+    "ast_hash": "c5bdd4fb4842268a4846e399562e8681",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/__init__.py": {
+    "mtime": 1773123481.7550752,
+    "ast_hash": "3cd374a55fff91210d65ed941beefffc",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/classification.py": {
+    "mtime": 1773987962.1767879,
+    "ast_hash": "4c72b30f9d9110f48e01343d8263e18b",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/correction_flow.py": {
+    "mtime": 1774866166.100815,
+    "ast_hash": "c2304c6f60cefae2d515eb66b4cdf391",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/finalization.py": {
+    "mtime": 1782303117.7022161,
+    "ast_hash": "379da8be986eb5db6c79cef10aec3def",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/formatters.py": {
+    "mtime": 1782302264.4570756,
+    "ast_hash": "a4ce4849d14f24b2451a8dfa5fffbbe0",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/idle_flow.py": {
+    "mtime": 1774334141.8774686,
+    "ast_hash": "3e1c9320734a46fd7563efdb3d0b723a",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/keyboard_protocol.py": {
+    "mtime": 1782302264.4590766,
+    "ast_hash": "c7ad60bc23d0cf7420623817af22592c",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/models.py": {
+    "mtime": 1782303117.703217,
+    "ast_hash": "93f1ea59592aca45ca2e15543c1391e8",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/preprocessing.py": {
+    "mtime": 1773131234.6000633,
+    "ast_hash": "0e151f27a53db8fb936b96b87b9c0931",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/problem_validation.py": {
+    "mtime": 1773128007.9234476,
+    "ast_hash": "35b3bb635f95f2abcac08424bb8aa6df",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/runtime.py": {
+    "mtime": 1773991424.7437634,
+    "ast_hash": "2e71aa2cea9596972e587251f2ac5433",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/service.py": {
+    "mtime": 1782303117.7052166,
+    "ast_hash": "1e775fbc0661ef3cba80c8fe827567ed",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/state_machine.py": {
+    "mtime": 1774350472.7069037,
+    "ast_hash": "a8bd579b5dcf5a4cd01bded22423c913",
+    "semantic_hash": ""
+  },
+  "app/telegram/dialog/status_service.py": {
+    "mtime": 1774248564.5331907,
+    "ast_hash": "038d4d3f3f3a8229a9c1ab71c0807a8b",
+    "semantic_hash": ""
+  },
+  "app/telegram/extractors.py": {
+    "mtime": 1774350691.6308506,
+    "ast_hash": "d9a00f02d83a93a923de0e0db6199fe6",
+    "semantic_hash": ""
+  },
+  "app/telegram/handlers/__init__.py": {
+    "mtime": 1772697188.6692824,
+    "ast_hash": "86df479877a4e58eb004652c243d4839",
+    "semantic_hash": ""
+  },
+  "app/telegram/handlers/dialog.py": {
+    "mtime": 1782303117.7067847,
+    "ast_hash": "e42753db64ab0dbbe4afdb0446317c3f",
+    "semantic_hash": ""
+  },
+  "app/telegram/keyboards.py": {
+    "mtime": 1782302264.463077,
+    "ast_hash": "19961c128dedc355b0b53f2ce5944c32",
+    "semantic_hash": ""
+  },
+  "app/telegram/middlewares/__init__.py": {
+    "mtime": 1772697174.6309445,
+    "ast_hash": "09a8543ce08c5ce40ef92f9b71b4cfa0",
+    "semantic_hash": ""
+  },
+  "app/telegram/middlewares/services.py": {
+    "mtime": 1772697181.7594059,
+    "ast_hash": "a722687aad97433a3e6ae65206b3aef7",
+    "semantic_hash": ""
+  },
+  "app/telegram/notifier.py": {
+    "mtime": 1772697169.323482,
+    "ast_hash": "1739d97cc3cad82ff8f8475b8051d5e4",
+    "semantic_hash": ""
+  },
+  "app/telegram/phrases.py": {
+    "mtime": 1772699772.8784094,
+    "ast_hash": "f8296898a53110208c0c10c8490ef54e",
+    "semantic_hash": ""
+  },
+  "data/categories.json": {
+    "mtime": 1774341058.034346,
+    "ast_hash": "b4d9a814eea1eafbe32ca66799ed7717",
+    "semantic_hash": ""
+  },
+  "data/housing_complexes.json": {
+    "mtime": 1774353343.439096,
+    "ast_hash": "2adefa23787270a4de4385515011620d",
+    "semantic_hash": ""
+  },
+  "data/tariffs.json": {
+    "mtime": 1774268539.2356813,
+    "ast_hash": "bd1936502667e088dc094d4346ca91cc",
+    "semantic_hash": ""
+  },
+  "pyproject.toml": {
+    "mtime": 1773988014.8975873,
+    "ast_hash": "501ae7861253b768f16bd944ce99a55a",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1774874689.7577665,
+    "ast_hash": "dce0ea754610ca340e38be66f8af8335",
+    "semantic_hash": ""
+  },
+  "docker-compose.yml": {
+    "mtime": 1774358380.1726837,
+    "ast_hash": "b641f6f9d6527256c04a15be2cc9a67e",
+    "semantic_hash": ""
+  },
+  "requirements-speech.txt": {
+    "mtime": 1773383013.5248754,
+    "ast_hash": "6844849544a6f0e8d73be26ddd63557e",
+    "semantic_hash": ""
+  },
+  "requirements.txt": {
+    "mtime": 1773383013.523876,
+    "ast_hash": "d1053262b347c283d877f56f42b9ec93",
+    "semantic_hash": ""
+  }
+}

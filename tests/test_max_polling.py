@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app.config.settings import Settings
 from app.core.buildings import BuildingRegistry, ComplexInfo, HouseInfo
+from app.max.client import MaxBotClient
 from app.max.keyboards import MaxKeyboardFactory
 from app.max.polling import MaxPolling
+from app.max.routing import MaxBotIdentity, route_max_update
 from app.telegram.keyboards import (
     TelegramKeyboardFactory,
     build_category_confirm_keyboard,
@@ -99,13 +102,22 @@ class _MaxClientStub:
         self.sent_messages: list[dict[str, object]] = []
         self.answered_callbacks: list[str] = []
 
-    async def send_message(self, chat_id: int, text: str, *, attachments=None, format: str = "markdown") -> dict[str, object]:
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        *,
+        attachments=None,
+        format: str = "markdown",
+        reply_to_mid: str | None = None,
+    ) -> dict[str, object]:
         self.sent_messages.append(
             {
                 "chat_id": chat_id,
                 "text": text,
                 "attachments": attachments,
                 "format": format,
+                "reply_to_mid": reply_to_mid,
             }
         )
         return {"success": True}
@@ -165,7 +177,9 @@ async def test_max_jk_page_callback_sends_requested_page_keyboard() -> None:
     sent = poller._client.sent_messages[0]  # type: ignore[attr-defined]
     assert sent["chat_id"] == 202
     assert "жилой комплекс" in str(sent["text"])
-    assert sent["attachments"] == MaxKeyboardFactory().jk_keyboard(registry.complex_names, page=1)
+    assert sent["attachments"] == MaxKeyboardFactory(
+        redirect_bot_url=settings.max_redirect_bot_url
+    ).jk_keyboard(registry.complex_names, page=1)
 
 
 @pytest.mark.asyncio
@@ -212,3 +226,201 @@ async def test_max_callback_routes_match_expected_dialog_actions() -> None:
             }
         )
         assert poller._dialog_service.calls[before] == expected  # type: ignore[attr-defined]
+
+
+_BOT_IDENTITY = MaxBotIdentity(user_id=700, username="УКбот")
+
+
+def _message_update(
+    text: str,
+    *,
+    mid: str = "mid-1",
+    chat_type: str = "chat",
+    sender_id: int = 100,
+    is_bot: bool = False,
+    link: dict[str, object] | None = None,
+    body_extra: dict[str, object] | None = None,
+) -> dict[str, object]:
+    body: dict[str, object] = {"mid": mid, "text": text}
+    body.update(body_extra or {})
+    message: dict[str, object] = {
+        "sender": {"user_id": sender_id, "is_bot": is_bot, "name": "Житель"},
+        "recipient": {"chat_id": 200, "chat_type": chat_type},
+        "body": body,
+    }
+    if link is not None:
+        message["link"] = link
+    return {"update_type": "message_created", "message": message}
+
+
+def test_max_group_routing_decision_table() -> None:
+    unaddressed = route_max_update(_message_update("У меня не работает домофон"), _BOT_IDENTITY)
+    mentioned = route_max_update(_message_update("@УКбот не работает домофон"), _BOT_IDENTITY)
+    command = route_max_update(_message_update("/домофон"), _BOT_IDENTITY)
+    reply = route_max_update(
+        _message_update(
+            "дом 5, подъезд 2",
+            link={"type": "reply", "sender": {"user_id": 700, "is_bot": True}},
+        ),
+        _BOT_IDENTITY,
+    )
+    other_mention = route_max_update(_message_update("@сосед не работает домофон"), _BOT_IDENTITY)
+    bot_sender = route_max_update(
+        _message_update("@УКбот привет", is_bot=True), _BOT_IDENTITY
+    )
+    channel = route_max_update(
+        _message_update("/заявка", chat_type="channel"), _BOT_IDENTITY
+    )
+    forwarded_command = route_max_update(
+        _message_update(
+            "/домофон", link={"type": "forward", "sender": {"user_id": 300}}
+        ),
+        _BOT_IDENTITY,
+    )
+
+    assert (unaddressed.accepted, unaddressed.reason) == (
+        False,
+        "ignored_unaddressed_group_message",
+    )
+    assert (mentioned.accepted, mentioned.text) == (True, "не работает домофон")
+    assert (command.reason, command.command) == ("accepted_command", "домофон")
+    assert reply.reason == "accepted_reply"
+    assert not other_mention.accepted
+    assert bot_sender.reason == "ignored_bot_sender"
+    assert channel.reason == "ignored_channel_message"
+    assert forwarded_command.reason == "ignored_forwarded_message"
+
+
+def test_max_dialog_structured_mention_callback_and_empty_input_routing() -> None:
+    dialog = route_max_update(
+        _message_update("У меня не работает домофон", chat_type="dialog"), _BOT_IDENTITY
+    )
+    dialog_command = route_max_update(
+        _message_update("/вода", chat_type="dialog"), _BOT_IDENTITY
+    )
+    structured_mention = route_max_update(
+        _message_update(
+            "не работает домофон",
+            body_extra={"mentions": [{"type": "mention", "user_id": 700}]},
+        ),
+        _BOT_IDENTITY,
+    )
+    empty_mention = route_max_update(_message_update("@УКбот"), _BOT_IDENTITY)
+    attachment = route_max_update(
+        _message_update("", body_extra={"attachments": [{"type": "image"}]}),
+        _BOT_IDENTITY,
+    )
+    callback = route_max_update(
+        {
+            "update_type": "message_callback",
+            "callback": {"callback_id": "cb-1", "user": {"user_id": 100}},
+        },
+        _BOT_IDENTITY,
+    )
+    edited = route_max_update({"update_type": "message_edited"}, _BOT_IDENTITY)
+
+    assert (dialog.reason, dialog.text) == (
+        "accepted_dialog",
+        "У меня не работает домофон",
+    )
+    assert (dialog_command.reason, dialog_command.command) == ("accepted_command", "вода")
+    assert structured_mention.reason == "accepted_mention"
+    assert empty_mention.action == "help"
+    assert not attachment.accepted
+    assert callback.reason == "accepted_callback"
+    assert edited.reason == "ignored_irrelevant_update"
+
+
+class _RespondingDialogServiceStub(_DialogServiceStub):
+    async def process_text(self, transport, text: str, from_voice: bool = False) -> None:
+        _ = from_voice
+        self.calls.append(("process_text", text))
+        await transport.send_text("Ответ", None)
+
+    async def start(self, transport, *, include_welcome: bool) -> None:
+        self.calls.append(("start", include_welcome))
+        await transport.send_text("Начинаем заявку", None)
+
+
+def _routing_poller() -> tuple[MaxPolling, _RespondingDialogServiceStub, _MaxClientStub]:
+    settings = Settings(max_bot_token="token")
+    services = SimpleNamespace(speech=SimpleNamespace(enabled=False))
+    poller = MaxPolling(settings, services)  # type: ignore[arg-type]
+    dialog = _RespondingDialogServiceStub()
+    client = _MaxClientStub()
+    poller._dialog_service = dialog  # type: ignore[assignment]
+    poller._client = client  # type: ignore[assignment]
+    poller._identity = _BOT_IDENTITY
+    return poller, dialog, client
+
+
+@pytest.mark.asyncio
+async def test_max_polling_gate_blocks_group_chatter_before_dialog_and_llm() -> None:
+    poller, dialog, client = _routing_poller()
+    await poller._handle_update(_message_update("У меня не работает домофон"))
+    assert dialog.calls == []
+    assert client.sent_messages == []
+
+
+@pytest.mark.asyncio
+async def test_max_mention_is_cleaned_and_response_replies_to_source() -> None:
+    poller, dialog, client = _routing_poller()
+    await poller._handle_update(_message_update("@УКбот не работает домофон"))
+    assert dialog.calls == [("process_text", "не работает домофон")]
+    assert len(client.sent_messages) == 1
+    assert client.sent_messages[0]["reply_to_mid"] == "mid-1"
+
+
+@pytest.mark.asyncio
+async def test_max_duplicate_mid_produces_exactly_one_call_and_response() -> None:
+    poller, dialog, client = _routing_poller()
+    update = _message_update("@УКбот не работает домофон")
+    await poller._handle_update(update)
+    await poller._handle_update(update)
+    assert len(dialog.calls) == 1
+    assert len(client.sent_messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_max_thematic_command_starts_seeded_scenario() -> None:
+    poller, dialog, client = _routing_poller()
+    await poller._handle_update(_message_update("/домофон"))
+    assert dialog.calls == [("process_text", "Не работает домофон")]
+    assert len(client.sent_messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_max_empty_mention_sends_help_without_dialog_or_llm() -> None:
+    poller, dialog, client = _routing_poller()
+    await poller._handle_update(_message_update("@УКбот"))
+    assert dialog.calls == []
+    assert len(client.sent_messages) == 1
+    assert "/помощь" in str(client.sent_messages[0]["text"])
+
+
+@pytest.mark.asyncio
+async def test_max_transport_coalesces_dialog_output_into_one_message() -> None:
+    poller, _, client = _routing_poller()
+    transport = poller._make_transport(200, 100, "Житель", reply_to_mid="mid-1")
+    await transport.send_text("Первая часть", None)
+    await transport.send_text("Вторая часть", [{"type": "inline_keyboard"}])
+    await transport.flush()
+    assert len(client.sent_messages) == 1
+    assert client.sent_messages[0]["text"] == "Первая часть\n\nВторая часть"
+    assert client.sent_messages[0]["reply_to_mid"] == "mid-1"
+
+
+@pytest.mark.asyncio
+async def test_max_client_encodes_reply_link() -> None:
+    client = MaxBotClient(Settings(max_bot_token="token"))
+    client._post = AsyncMock(return_value={"success": True})  # type: ignore[method-assign]
+    await client.send_message(200, "Ответ", reply_to_mid="mid-1")
+    client._post.assert_awaited_once_with(
+        "messages",
+        params={"chat_id": 200},
+        json={
+            "text": "Ответ",
+            "format": "markdown",
+            "link": {"type": "reply", "mid": "mid-1"},
+        },
+    )

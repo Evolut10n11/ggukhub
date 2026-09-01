@@ -177,7 +177,9 @@ async def test_max_jk_page_callback_sends_requested_page_keyboard() -> None:
     sent = poller._client.sent_messages[0]  # type: ignore[attr-defined]
     assert sent["chat_id"] == 202
     assert "жилой комплекс" in str(sent["text"])
-    assert sent["attachments"] == MaxKeyboardFactory().jk_keyboard(registry.complex_names, page=1)
+    assert sent["attachments"] == MaxKeyboardFactory(
+        redirect_bot_url=settings.max_redirect_bot_url
+    ).jk_keyboard(registry.complex_names, page=1)
 
 
 @pytest.mark.asyncio

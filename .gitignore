@@ -36,6 +36,7 @@ requirements-dev.txt
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+graphify-out/cache/
 .coverage
 .coverage.*
 htmlcov/
@@ -61,3 +62,6 @@ desktop.ini
 
 # ── Claude Code ─────────────────────────────────────────
 .claude/
+
+# ── Cert archives (extracted into certs/) ──────────────
+*.zip

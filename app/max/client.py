@@ -15,7 +15,7 @@ class MaxApiError(RuntimeError):
 
 
 class MaxBotClient:
-    """Thin HTTP client for MAX Bot API (platform-api.max.ru)."""
+    """Thin HTTP client for MAX Bot API (platform-api2.max.ru)."""
 
     def __init__(self, settings: Settings) -> None:
         self._token = settings.max_bot_token
@@ -50,12 +50,15 @@ class MaxBotClient:
         user_id: int | None = None,
         attachments: list[dict[str, Any]] | None = None,
         format: str = "markdown",
+        reply_to_mid: str | None = None,
     ) -> dict[str, Any]:
         if chat_id is None and user_id is None:
             raise ValueError("Either chat_id or user_id must be provided")
         body: dict[str, Any] = {"text": text, "format": format}
         if attachments:
             body["attachments"] = attachments
+        if reply_to_mid:
+            body["link"] = {"type": "reply", "mid": reply_to_mid}
         params: dict[str, Any] = {}
         if chat_id is not None:
             params["chat_id"] = chat_id
@@ -70,6 +73,7 @@ class MaxBotClient:
         *,
         attachments: list[dict[str, Any]] | None = None,
         format: str = "markdown",
+        reply_to_mid: str | None = None,
     ) -> dict[str, Any]:
         return await self.send_message(
             None,
@@ -77,6 +81,7 @@ class MaxBotClient:
             user_id=user_id,
             attachments=attachments,
             format=format,
+            reply_to_mid=reply_to_mid,
         )
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> dict[str, Any]:

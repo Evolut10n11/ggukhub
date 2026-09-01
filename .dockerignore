@@ -23,3 +23,4 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 bot_output.log
+*.zip

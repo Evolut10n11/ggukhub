@@ -32,6 +32,9 @@ RUN pip install --no-cache-dir -r requirements.txt -r requirements-speech.txt
 COPY app/ ./app/
 COPY data/ ./data/
 
+# Fail the build if startup dependencies are missing, before replacing the running bot.
+RUN python -c "import greenlet; import app.run_stack"
+
 # Data volume for sqlite DB
 RUN mkdir -p /app/var
 VOLUME ["/app/var"]

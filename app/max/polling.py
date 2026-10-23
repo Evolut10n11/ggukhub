@@ -454,6 +454,9 @@ class MaxPolling:
         houses = await service.get_house_list_for_user("max", user_id)
         if houses is None:
             return
+        if not houses:
+            await self._client.edit_message(message_id, "Уточните, пожалуйста, дом.", attachments=[])
+            return
         attachments = self._kb.house_keyboard(houses, page=page)
         await self._client.edit_message(message_id, "Выберите дом:", attachments=attachments)
 

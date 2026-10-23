@@ -91,6 +91,22 @@
       "houses": [
         {"address": "4 Мервинский проезд, д.3", "entrances": 2, "apartments": 542}
       ]
+    },
+    {
+      "name": "Еврокласс-4",
+      "houses": []
+    },
+    {
+      "name": "Гранд Комфорт",
+      "houses": []
+    },
+    {
+      "name": "Гранд Комфорт-2",
+      "houses": []
+    },
+    {
+      "name": "Гранд Комфорт-3",
+      "houses": []
     }
   ],
   "standalone_houses": [

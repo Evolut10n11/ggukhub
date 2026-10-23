@@ -215,6 +215,9 @@ class DialogService:
                 return
             houses = self._get_current_house_list(snapshot.data)
             await transport.clear_inline_keyboard()
+            if not houses:
+                await transport.send_text("Уточните, пожалуйста, дом.", None)
+                return
             await transport.send_text("Выберите дом:", self._kb.house_keyboard(houses, page=page))
 
     async def select_house(self, transport: DialogTransport, index: int) -> None:
@@ -226,6 +229,9 @@ class DialogService:
                 return
             data = snapshot.data.model_copy()
             houses = self._get_current_house_list(data)
+            if not houses:
+                await transport.send_text("Уточните, пожалуйста, дом.", None)
+                return
             if index < 0 or index >= len(houses):
                 await transport.send_text("Дом не найден. Выберите из списка.", self._kb.house_keyboard(houses, 0))
                 return
@@ -938,9 +944,7 @@ class DialogService:
             return
 
         # Try to match extracted house number (e.g. "5") to addresses in the JK
-        houses = self._registry.houses_for_complex(jk)
-        if not houses:
-            houses = self._registry.standalone_houses
+        houses = self._get_current_house_list(data)
 
         for house in houses:
             # Match by house number in the address, e.g. "д.5" or "д.18, к.1"
@@ -955,9 +959,8 @@ class DialogService:
         jk = str(data.jk or "").strip()
         if jk == STANDALONE_JK_MARKER:
             return self._registry.standalone_houses
-        houses = self._registry.houses_for_complex(jk)
-        if houses:
-            return houses
+        if jk in self._registry.complex_names:
+            return self._registry.houses_for_complex(jk)
         return self._registry.standalone_houses
 
     async def _reset_to_new_request(self, transport: DialogTransport, user_id: int) -> None:

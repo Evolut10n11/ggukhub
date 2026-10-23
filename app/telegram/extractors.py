@@ -114,6 +114,8 @@ _COMPLEX_ALIASES: dict[str, str] = {
     "прайдпарк": "Прайд Парк",
     "euroclass": "Еврокласс",
     "евро класс": "Еврокласс",
+    "grand comfort": "Гранд Комфорт",
+    "грандкомфорт": "Гранд Комфорт",
     "fresh life": "Фреш Лайф",
     "фрешлайф": "Фреш Лайф",
     "skyline": "Скайлайн",
@@ -135,15 +137,23 @@ def extract_housing_complex(text: str, housing_complexes: list[str]) -> str | No
     if not normalized_text:
         return None
 
-    for complex_name in sorted(housing_complexes, key=len, reverse=True):
-        if _normalize_for_match(complex_name) in normalized_text:
-            return complex_name
+    # Match numbered names and their aliases before the corresponding base name.
+    names: list[tuple[str, str]] = []
+    for complex_name in housing_complexes:
+        normalized_name = _normalize_for_match(complex_name)
+        names.append((normalized_name, complex_name))
+        suffix_match = re.search(r" \d+$", normalized_name)
+        suffix = suffix_match.group() if suffix_match else ""
+        base = normalized_name.removesuffix(suffix) if suffix else normalized_name
+        for alias, canonical in _COMPLEX_ALIASES.items():
+            if _normalize_for_match(canonical) == base:
+                names.append((_normalize_for_match(alias) + suffix, complex_name))
 
-    # Check known aliases (e.g. "Pride Park" → "Прайд Парк")
-    known_set = set(housing_complexes)
-    for alias, canonical in _COMPLEX_ALIASES.items():
-        if alias in normalized_text and canonical in known_set:
-            return canonical
+    for name, complex_name in sorted(names, key=lambda item: len(item[0]), reverse=True):
+        # A complete numeric suffix is significant: -20 is neither -2 nor the base ЖК.
+        pattern = rf"(?<!\w){re.escape(name)}(?!\w)(?! \d)"
+        if re.search(pattern, normalized_text):
+            return complex_name
 
     match = _COMPILED_JK_REGEX.search(text)
     if not match:
@@ -172,8 +182,20 @@ def _best_complex_match(candidate: str, housing_complexes: list[str]) -> str | N
 
     best_score = 0.0
     best_value: str | None = None
+    # Address numbers after the name are not part of the ЖК's numeric suffix.
+    address_matches = [
+        pattern.search(candidate)
+        for pattern in _COMPILED_HOUSE + _COMPILED_ENTRANCE + _COMPILED_APARTMENT
+    ]
+    name_end = min((match.start() for match in address_matches if match), default=len(candidate))
+    candidate_number = re.search(r"\b\d+\b", _normalize_for_match(candidate[:name_end]))
     for complex_name in housing_complexes:
         normalized_complex = _normalize_for_match(complex_name)
+        complex_number = re.search(r"\b\d+\b", normalized_complex)
+        if candidate_number and (
+            not complex_number or candidate_number.group() != complex_number.group()
+        ):
+            continue
         normalized_complex_lat = _to_latin(normalized_complex)
         score_native = SequenceMatcher(a=normalized_candidate, b=normalized_complex).ratio()
         score_latin = SequenceMatcher(a=normalized_candidate_lat, b=normalized_complex_lat).ratio()
@@ -198,6 +220,7 @@ def _normalize_for_match(value: str) -> str:
     normalized = normalize_text(value).replace("ё", "е")
     normalized = re.sub(r"[«»\"'`]", " ", normalized)
     normalized = re.sub(r"[^a-zа-я0-9]+", " ", normalized)
+    normalized = re.sub(r"(?<=[a-zа-я])(?=[0-9])", " ", normalized)
     return " ".join(normalized.split())
 
 

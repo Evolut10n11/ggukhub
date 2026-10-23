@@ -57,9 +57,10 @@
     {
       "name": "Еврокласс",
       "houses": [
-        {"address": "Быстрецкая, д.18, к.1", "entrances": 2, "apartments": 450},
-        {"address": "Быстрецкая, д.18, к.2", "entrances": 4, "apartments": 900},
-        {"address": "Быстрецкая, д.18, к.3", "entrances": 2, "apartments": 432}
+        {"address": "Быстрецкая, д.18, к.1", "entrances": 2, "apartments": 450, "aliases": ["Еврокласс-1"]},
+        {"address": "Быстрецкая, д.18, к.2", "entrances": 4, "apartments": 900, "aliases": ["Еврокласс-2"]},
+        {"address": "Быстрецкая, д.18, к.3", "entrances": 2, "apartments": 432, "aliases": ["Еврокласс-3"]},
+        {"address": "Быстрецкая, д.18, к.4", "entrances": null, "apartments": null, "aliases": ["Еврокласс-4"]}
       ]
     },
     {
@@ -93,20 +94,12 @@
       ]
     },
     {
-      "name": "Еврокласс-4",
-      "houses": []
-    },
-    {
       "name": "Гранд Комфорт",
-      "houses": []
-    },
-    {
-      "name": "Гранд Комфорт-2",
-      "houses": []
-    },
-    {
-      "name": "Гранд Комфорт-3",
-      "houses": []
+      "houses": [
+        {"address": "Гранд Комфорт - 1", "entrances": null, "apartments": null, "aliases": ["Гранд Комфорт-1"]},
+        {"address": "Гранд Комфорт - 2", "entrances": null, "apartments": null, "aliases": ["Гранд Комфорт-2"]},
+        {"address": "Гранд Комфорт - 3", "entrances": null, "apartments": null, "aliases": ["Гранд Комфорт-3"]}
+      ]
     }
   ],
   "standalone_houses": [

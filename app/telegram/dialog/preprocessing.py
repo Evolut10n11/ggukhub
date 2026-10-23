@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.core.buildings import BuildingRegistry
 from app.core.models import User
 from app.core.storage import Storage
 from app.core.utils import normalize_text
@@ -21,9 +22,16 @@ class DialogPreprocessResult:
 
 
 class DialogInputPreprocessor:
-    def __init__(self, *, storage: Storage, housing_complexes: list[str]) -> None:
+    def __init__(
+        self,
+        *,
+        storage: Storage,
+        housing_complexes: list[str],
+        registry: BuildingRegistry | None = None,
+    ) -> None:
         self._storage = storage
         self._housing_complexes = list(housing_complexes)
+        self._registry = registry
 
     async def preprocess(
         self,
@@ -33,7 +41,7 @@ class DialogInputPreprocessor:
         text: str,
     ) -> DialogPreprocessResult:
         stripped_text = text.strip()
-        extracted = extract_report_context(stripped_text, self._housing_complexes)
+        extracted = extract_report_context(stripped_text, self._housing_complexes, registry=self._registry)
         data = merge_extracted_context(snapshot.data, extracted)
         phone_synced = await self._sync_extracted_phone(user, extracted)
         return DialogPreprocessResult(

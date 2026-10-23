@@ -174,22 +174,38 @@ async def jk_page_handler(callback: CallbackQuery, services: AppServices) -> Non
         )
 
 
-@router.callback_query(F.data.startswith("jk_pick:"))
-async def jk_pick_handler(callback: CallbackQuery, services: AppServices) -> None:
+async def _refresh_jk_menu(callback: CallbackQuery, services: AppServices) -> None:
+    await _callback_transport(callback).send_text(
+        "Список ЖК обновлён. Выберите ваш жилой комплекс:",
+        build_jk_keyboard(services.building_registry.complex_names, page=0),
+    )
+
+
+@router.callback_query(F.data.startswith("jk_select:"))
+async def jk_select_handler(callback: CallbackQuery, services: AppServices) -> None:
     await _ack_callback(callback)
     if callback.data is None or callback.from_user is None:
         return
 
-    names = services.building_registry.complex_names
-    index = int(callback.data.split(":", 1)[1])
-    if index < 0 or index >= len(names):
-        await _callback_transport(callback).send_text("ЖК не найден", None)
+    key = callback.data.split(":", 1)[1]
+    name = services.building_registry.complex_name_for_key(key)
+    if name is None:
+        await _refresh_jk_menu(callback, services)
         return
 
     await _dialog_service(services).select_housing_complex(
         _callback_transport(callback),
-        names[index],
+        name,
     )
+
+
+@router.callback_query(F.data.startswith("jk_pick:"))
+async def jk_pick_handler(callback: CallbackQuery, services: AppServices) -> None:
+    await _ack_callback(callback)
+    if callback.from_user is None:
+        return
+    # Old indices may now refer to another ЖК after regrouping the directory.
+    await _refresh_jk_menu(callback, services)
 
 
 @router.callback_query(F.data == "jk_standalone")

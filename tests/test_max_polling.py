@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.config.settings import Settings
-from app.core.buildings import BuildingRegistry, ComplexInfo, HouseInfo
+from app.core.buildings import BuildingRegistry, ComplexInfo, HouseInfo, complex_key
 from app.max.client import MaxBotClient
 from app.max.keyboards import MaxKeyboardFactory
 from app.max.polling import MaxPolling
@@ -201,7 +201,7 @@ async def test_max_callback_routes_match_expected_dialog_actions() -> None:
     poller._client = _MaxClientStub()  # type: ignore[assignment]
 
     cases = [
-        ("jk_pick:1", ("select_housing_complex", "Complex 1")),
+        (f"jk_select:{complex_key('Complex 1')}", ("select_housing_complex", "Complex 1")),
         ("jk_standalone", ("show_standalone_houses", None)),
         ("jk_unknown", ("mark_unknown_housing_complex", None)),
         ("house:2", ("select_house", 2)),

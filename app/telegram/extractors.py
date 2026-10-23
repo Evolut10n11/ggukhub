@@ -3,8 +3,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from typing import TYPE_CHECKING
 
 from app.core.utils import normalize_phone, normalize_text
+
+if TYPE_CHECKING:
+    from app.core.buildings import BuildingRegistry
 
 _RU_TO_LATIN = {
     "а": "a",
@@ -75,14 +79,20 @@ class ExtractedReportContext:
     phone: str | None = None
 
 
-def extract_report_context(text: str, housing_complexes: list[str]) -> ExtractedReportContext:
+def extract_report_context(
+    text: str,
+    housing_complexes: list[str],
+    *,
+    registry: BuildingRegistry | None = None,
+) -> ExtractedReportContext:
     source = text.strip()
     if not source:
         return ExtractedReportContext()
 
+    registered_house = _extract_registered_house(source, housing_complexes, registry)
     return ExtractedReportContext(
-        jk=extract_housing_complex(source, housing_complexes),
-        house=extract_house(source),
+        jk=registered_house[0] if registered_house else extract_housing_complex(source, housing_complexes),
+        house=registered_house[1] if registered_house else extract_house(source),
         entrance=extract_entrance(source),
         apartment=extract_apartment(source),
         phone=extract_phone(source),
@@ -115,6 +125,7 @@ _COMPLEX_ALIASES: dict[str, str] = {
     "euroclass": "Еврокласс",
     "евро класс": "Еврокласс",
     "grand comfort": "Гранд Комфорт",
+    "grandcomfort": "Гранд Комфорт",
     "грандкомфорт": "Гранд Комфорт",
     "fresh life": "Фреш Лайф",
     "фрешлайф": "Фреш Лайф",
@@ -129,7 +140,12 @@ _COMPLEX_ALIASES: dict[str, str] = {
 }
 
 
-def extract_housing_complex(text: str, housing_complexes: list[str]) -> str | None:
+def extract_housing_complex(
+    text: str,
+    housing_complexes: list[str],
+    *,
+    registry: BuildingRegistry | None = None,
+) -> str | None:
     if not housing_complexes:
         return None
 
@@ -137,22 +153,18 @@ def extract_housing_complex(text: str, housing_complexes: list[str]) -> str | No
     if not normalized_text:
         return None
 
+    registered_house = _extract_registered_house(text, housing_complexes, registry)
+    if registered_house:
+        return registered_house[0]
+
     # Match numbered names and their aliases before the corresponding base name.
     names: list[tuple[str, str]] = []
     for complex_name in housing_complexes:
-        normalized_name = _normalize_for_match(complex_name)
-        names.append((normalized_name, complex_name))
-        suffix_match = re.search(r" \d+$", normalized_name)
-        suffix = suffix_match.group() if suffix_match else ""
-        base = normalized_name.removesuffix(suffix) if suffix else normalized_name
-        for alias, canonical in _COMPLEX_ALIASES.items():
-            if _normalize_for_match(canonical) == base:
-                names.append((_normalize_for_match(alias) + suffix, complex_name))
+        names.extend((name, complex_name) for name in _name_variants(complex_name))
 
     for name, complex_name in sorted(names, key=lambda item: len(item[0]), reverse=True):
         # A complete numeric suffix is significant: -20 is neither -2 nor the base ЖК.
-        pattern = rf"(?<!\w){re.escape(name)}(?!\w)(?! \d)"
-        if re.search(pattern, normalized_text):
+        if _contains_name(normalized_text, name):
             return complex_name
 
     match = _COMPILED_JK_REGEX.search(text)
@@ -164,6 +176,43 @@ def extract_housing_complex(text: str, housing_complexes: list[str]) -> str | No
         return None
 
     return _best_complex_match(candidate, housing_complexes)
+
+
+def _name_variants(name: str) -> list[str]:
+    normalized_name = _normalize_for_match(name)
+    variants = [normalized_name]
+    suffix_match = re.search(r" \d+$", normalized_name)
+    suffix = suffix_match.group() if suffix_match else ""
+    base = normalized_name.removesuffix(suffix) if suffix else normalized_name
+    for alias, canonical in _COMPLEX_ALIASES.items():
+        if _normalize_for_match(canonical) == base:
+            variants.append(_normalize_for_match(alias) + suffix)
+    return variants
+
+
+def _contains_name(normalized_text: str, name: str) -> bool:
+    return bool(name and re.search(rf"(?<!\w){re.escape(name)}(?!\w)(?! \d)", normalized_text))
+
+
+def _extract_registered_house(
+    text: str, housing_complexes: list[str], registry: BuildingRegistry | None
+) -> tuple[str, str] | None:
+    if registry is None:
+        return None
+
+    normalized_text = _normalize_for_match(text)
+    names = [
+        (variant, complex_info.name, house.address)
+        for complex_info in registry.complexes
+        if complex_info.name in housing_complexes
+        for house in complex_info.houses
+        for name in [house.address, *house.aliases]
+        for variant in _name_variants(name)
+    ]
+    for name, complex_name, address in sorted(names, key=lambda item: len(item[0]), reverse=True):
+        if _contains_name(normalized_text, name):
+            return complex_name, address
+    return None
 
 
 def _extract_compiled(text: str, compiled: tuple[re.Pattern[str], ...]) -> str | None:

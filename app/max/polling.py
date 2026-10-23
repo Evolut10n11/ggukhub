@@ -495,11 +495,21 @@ class MaxPolling:
             if handled:
                 return
 
-        if payload.startswith("jk_pick:"):
-            idx = int(payload.split(":", 1)[1])
-            complex_names = self._services.building_registry.complex_names
-            if 0 <= idx < len(complex_names):
-                await service.select_housing_complex(transport, complex_names[idx])
+        if payload.startswith(("jk_select:", "jk_pick:")):
+            registry = self._services.building_registry
+            name = (
+                registry.complex_name_for_key(payload.split(":", 1)[1])
+                if payload.startswith("jk_select:")
+                else None
+            )
+            if name is None:
+                # Refresh old index-based or unknown choices without resetting the request.
+                await transport.send_text(
+                    "Список ЖК обновлён. Выберите ваш жилой комплекс:",
+                    self._kb.jk_keyboard(registry.complex_names, page=0),
+                )
+            else:
+                await service.select_housing_complex(transport, name)
         elif payload.startswith("jk_page:"):
             page_str = payload.split(":", 1)[1]
             if page_str != "stay":

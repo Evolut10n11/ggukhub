@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -8,8 +10,13 @@ from pathlib import Path
 @dataclass(slots=True)
 class HouseInfo:
     address: str
-    entrances: int
-    apartments: int
+    entrances: int | None = None
+    apartments: int | None = None
+    aliases: list[str] = field(default_factory=list)
+
+
+def complex_key(name: str) -> str:
+    return hashlib.sha256(name.encode("utf-8")).hexdigest()[:12]
 
 
 @dataclass(slots=True)
@@ -34,6 +41,24 @@ class BuildingRegistry:
     @property
     def complex_names(self) -> list[str]:
         return [c.name for c in self.complexes]
+
+    def complex_name_for_key(self, key: str) -> str | None:
+        return next((c.name for c in self.complexes if complex_key(c.name) == key), None)
+
+    def resolve_house_alias(self, name: str) -> tuple[str, HouseInfo] | None:
+        def normalize(value: str) -> str:
+            return re.sub(r"[^a-zа-я0-9]", "", value.casefold().replace("ё", "е"))
+
+        query = normalize(name)
+        if not query:
+            return None
+        matches = [
+            (complex_info.name, house)
+            for complex_info in self.complexes
+            for house in complex_info.houses
+            if any(normalize(alias) == query for alias in [house.address, *house.aliases])
+        ]
+        return matches[0] if len(matches) == 1 else None
 
     def houses_for_complex(self, name: str) -> list[HouseInfo]:
         for c in self.complexes:
@@ -99,8 +124,9 @@ class BuildingRegistry:
             houses = [
                 HouseInfo(
                     address=h["address"],
-                    entrances=h.get("entrances", 1),
-                    apartments=h.get("apartments", 0),
+                    entrances=h.get("entrances"),
+                    apartments=h.get("apartments"),
+                    aliases=h.get("aliases", []),
                 )
                 for h in item.get("houses", [])
             ]
@@ -109,8 +135,9 @@ class BuildingRegistry:
         standalone = [
             HouseInfo(
                 address=h["address"],
-                entrances=h.get("entrances", 1),
-                apartments=h.get("apartments", 0),
+                entrances=h.get("entrances"),
+                apartments=h.get("apartments"),
+                aliases=h.get("aliases", []),
             )
             for h in raw.get("standalone_houses", [])
         ]

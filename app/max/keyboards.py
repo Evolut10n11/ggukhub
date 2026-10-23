@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.buildings import HouseInfo
+from app.core.buildings import HouseInfo, complex_key
 from app.telegram.constants import CATEGORY_LABELS
 
 JK_PAGE_SIZE = 8
@@ -63,11 +63,8 @@ class MaxKeyboardFactory:
         rows: list[list[dict[str, Any]]] = []
         for row_start in range(0, len(visible), JK_BUTTON_COLUMNS):
             row = [
-                _cb_button(_display_name(name), f"jk_pick:{idx}")
-                for idx, name in enumerate(
-                    visible[row_start : row_start + JK_BUTTON_COLUMNS],
-                    start=start + row_start,
-                )
+                _cb_button(_display_name(name), f"jk_select:{complex_key(name)}")
+                for name in visible[row_start : row_start + JK_BUTTON_COLUMNS]
             ]
             rows.append(row)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from app.core.buildings import BuildingRegistry, HouseInfo
@@ -34,7 +35,7 @@ from app.telegram.dialog.state_machine import (
 )
 from app.telegram.dialog.keyboard_protocol import KeyboardFactory
 from app.telegram.dialog.status_service import DialogReportLookupService
-from app.telegram.extractors import ExtractedReportContext
+from app.telegram.extractors import ExtractedReportContext, extract_house
 from app.telegram.phrases import is_farewell_or_thanks, is_greeting
 
 if TYPE_CHECKING:
@@ -64,6 +65,7 @@ class DialogService:
         self._preprocessor = DialogInputPreprocessor(
             storage=self._deps.storage,
             housing_complexes=self._registry.complex_names,
+            registry=self._registry,
         )
         self._category_service = DialogCategoryService(self._deps.classifier)
         self._report_lookup_service = DialogReportLookupService(
@@ -105,13 +107,14 @@ class DialogService:
                 prefilled = DialogSessionData(
                     jk=user.jk, house=user.house, entrance=user.entrance, apartment=user.apartment,
                 )
+                self._normalize_saved_location(prefilled)
                 await self._save_snapshot(user.id, DialogStep.AWAITING_ADDRESS_REUSE_CONFIRM, prefilled)
-                address_parts = [f"Дом: {user.house}"]
-                if user.entrance:
-                    address_parts.append(f"Подъезд: {user.entrance}")
-                address_parts.append(f"Квартира: {user.apartment}")
-                if user.jk:
-                    address_parts.insert(0, f"ЖК: {user.jk}")
+                address_parts = [f"Дом: {prefilled.house}"]
+                if prefilled.entrance:
+                    address_parts.append(f"Подъезд: {prefilled.entrance}")
+                address_parts.append(f"Квартира: {prefilled.apartment}")
+                if prefilled.jk:
+                    address_parts.insert(0, f"ЖК: {prefilled.jk}")
                 address_summary = "\n".join(address_parts)
                 if include_welcome:
                     greeting = "Здравствуйте!\n\n"
@@ -149,9 +152,10 @@ class DialogService:
                     )
                 else:
                     await self._save_snapshot(user.id, DialogStep.AWAITING_ENTRANCE, data)
+                    prompt = "Выберите подъезд:" if house.entrances else "Укажите подъезд. Если не знаете, напишите «-»."
                     await transport.send_text(
-                        f"ЖК: {complex_name}, {house.address}. Выберите подъезд:",
-                        self._kb.entrance_keyboard(house.entrances),
+                        f"ЖК: {complex_name}, {house.address}. {prompt}",
+                        self._kb.entrance_keyboard(house.entrances) if house.entrances else None,
                     )
             elif len(houses) > 1:
                 await self._save_snapshot(user.id, DialogStep.AWAITING_HOUSE, data)
@@ -248,9 +252,10 @@ class DialogService:
                 await transport.send_text(f"Дом: {house.address}. Укажите номер квартиры.", None)
             else:
                 await self._save_snapshot(user.id, DialogStep.AWAITING_ENTRANCE, data)
+                prompt = "Выберите подъезд:" if house.entrances else "Укажите подъезд. Если не знаете, напишите «-»."
                 await transport.send_text(
-                    f"Дом: {house.address}. Выберите подъезд:",
-                    self._kb.entrance_keyboard(house.entrances),
+                    f"Дом: {house.address}. {prompt}",
+                    self._kb.entrance_keyboard(house.entrances) if house.entrances else None,
                 )
 
     async def select_entrance(self, transport: DialogTransport, entrance: str) -> None:
@@ -262,7 +267,7 @@ class DialogService:
                 return
             data = snapshot.data.model_copy()
             house_info = self._registry.find_house(str(data.house or ""))
-            if house_info and entrance.isdigit():
+            if house_info and house_info.entrances is not None and entrance.isdigit():
                 n = int(entrance)
                 if n < 1 or n > house_info.entrances:
                     await transport.send_text(
@@ -611,7 +616,7 @@ class DialogService:
             data.entrance = "1"
             await self._save_snapshot(user.id, DialogStep.AWAITING_APARTMENT, data)
             await transport.send_text("Укажите номер квартиры.", None)
-        elif house_info and house_info.entrances > 1:
+        elif house_info and house_info.entrances is not None and house_info.entrances > 1:
             await self._save_snapshot(user.id, DialogStep.AWAITING_ENTRANCE, data)
             await transport.send_text(
                 "Выберите подъезд:",
@@ -636,7 +641,7 @@ class DialogService:
         cleaned = cleanup_optional_field(entrance_input)
         if cleaned is not None:
             house_info = self._registry.find_house(str(data.house or ""))
-            if house_info and cleaned.isdigit():
+            if house_info and house_info.entrances is not None and cleaned.isdigit():
                 n = int(cleaned)
                 if n < 1 or n > house_info.entrances:
                     await transport.send_text(
@@ -660,7 +665,7 @@ class DialogService:
     ) -> None:
         apt_input = extracted.apartment if extracted.apartment else text
         house_info = self._registry.find_house(str(data.house or ""))
-        if house_info and apt_input.strip().isdigit():
+        if house_info and house_info.apartments is not None and apt_input.strip().isdigit():
             n = int(apt_input.strip())
             if n < 1 or n > house_info.apartments:
                 await transport.send_text(
@@ -932,8 +937,25 @@ class DialogService:
 
     # ── Helpers ──
 
+    def _normalize_saved_location(self, data: DialogSessionData) -> None:
+        """Keep stored names usable after numbered complexes become houses in a group."""
+        jk = str(data.jk or "").strip()
+        raw_house = str(data.house or "").strip()
+        if jk and jk not in self._registry.complex_names:
+            legacy_house = self._registry.resolve_house_alias(jk)
+            if legacy_house:
+                data.jk, house = legacy_house
+                if not raw_house or raw_house.isdigit() or self._registry.resolve_house_alias(raw_house) == legacy_house:
+                    data.house = house.address
+
+        house_alias = self._registry.resolve_house_alias(str(data.house or ""))
+        if house_alias and (not data.jk or data.jk == house_alias[0]):
+            data.jk, house = house_alias
+            data.house = house.address
+
     def _resolve_voice_house(self, data: DialogSessionData) -> None:
         """Try to match extracted house number to a full address in the registry."""
+        self._normalize_saved_location(data)
         jk = str(data.jk or "").strip()
         raw_house = str(data.house or "").strip()
         if not jk or not raw_house:
@@ -943,19 +965,26 @@ class DialogService:
         if self._registry.find_house(raw_house):
             return
 
-        # Try to match extracted house number (e.g. "5") to addresses in the JK
+        # A number alone must identify exactly one house, never a substring of an address.
+        if not re.fullmatch(r"\d+[a-zа-я]?", raw_house, flags=re.IGNORECASE):
+            return
         houses = self._get_current_house_list(data)
-
+        matches: list[HouseInfo] = []
         for house in houses:
-            # Match by house number in the address, e.g. "д.5" or "д.18, к.1"
-            if raw_house in house.address or f"д.{raw_house}" in house.address or f"д. {raw_house}" in house.address:
-                data.house = house.address
-                # Auto-set entrance if only 1
-                if house.entrances == 1 and not data.entrance:
-                    data.entrance = "1"
-                return
+            house_number = extract_house(house.address)
+            if house_number is None:
+                suffix = re.search(r"[-–—]\s*(\d+)$", house.address)
+                house_number = suffix.group(1) if suffix else None
+            if house_number and house_number.casefold() == raw_house.casefold():
+                matches.append(house)
+        if len(matches) == 1:
+            house = matches[0]
+            data.house = house.address
+            if house.entrances == 1 and not data.entrance:
+                data.entrance = "1"
 
     def _get_current_house_list(self, data: DialogSessionData) -> list[HouseInfo]:
+        self._normalize_saved_location(data)
         jk = str(data.jk or "").strip()
         if jk == STANDALONE_JK_MARKER:
             return self._registry.standalone_houses
@@ -1165,12 +1194,15 @@ class DialogService:
 
     async def _load_snapshot(self, user_id: int) -> DialogSnapshot:
         payload = await self._deps.storage.get_session(user_id)
+        data = DialogSessionData.from_mapping(payload.data)
+        self._normalize_saved_location(data)
         return DialogSnapshot(
             step=dialog_step(payload.step),
-            data=DialogSessionData.from_mapping(payload.data),
+            data=data,
         )
 
     async def _save_snapshot(self, user_id: int, step: DialogStep, data: DialogSessionData) -> None:
+        self._normalize_saved_location(data)
         await self._deps.storage.save_session(
             user_id=user_id,
             payload=SessionPayload(step=step.value, data=data.to_mapping()),

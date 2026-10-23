@@ -3,7 +3,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.core.buildings import HouseInfo
+from app.core.buildings import HouseInfo, complex_key
 from app.telegram.constants import CATEGORY_LABELS
 
 JK_PAGE_SIZE = 8
@@ -39,12 +39,9 @@ def build_jk_keyboard(complex_names: list[str], page: int) -> InlineKeyboardMark
         row_buttons = [
             InlineKeyboardButton(
                 text=_display_housing_complex_name(name),
-                callback_data=f"jk_pick:{index}",
+                callback_data=f"jk_select:{complex_key(name)}",
             )
-            for index, name in enumerate(
-                visible[row_start : row_start + JK_BUTTON_COLUMNS],
-                start=start + row_start,
-            )
+            for name in visible[row_start : row_start + JK_BUTTON_COLUMNS]
         ]
         builder.row(*row_buttons)
 
